@@ -1,48 +1,60 @@
 import * as vscode from 'vscode';
+import * as child_process from 'child_process';
 import * as fs from 'fs';
 import * as readline from 'readline';
+import * as stream from 'stream';
+import { resolveCliPathFromVSCodeExecutablePath } from 'vscode-test';
 
 // this method is called when vs code is activated
 export function activate(context: vscode.ExtensionContext) {
     console.log('fuchsia package-to-source links extension is activated');
     const provider = new Provider();
     provider.init().then(() => {
-        const providerRegistrations = vscode.Disposable.from(
-            vscode.languages.registerDocumentLinkProvider({ scheme: Provider.scheme }, provider)
-        );
-        context.subscriptions.push(
-            providerRegistrations
-        );
+        context.subscriptions.push(vscode.Disposable.from(
+            vscode.languages.registerDocumentLinkProvider({ scheme: Provider.scheme }, provider),
+        ));
+        context.subscriptions.push(vscode.Disposable.from(
+            vscode.languages.registerReferenceProvider({ scheme: Provider.scheme }, provider),
+        ));
     });
 }
 
-export class Provider implements vscode.DocumentLinkProvider {
+export class Provider implements vscode.DocumentLinkProvider, vscode.ReferenceProvider {
 
     static scheme = '*';
 
-    private _baseUri: vscode.Uri | null = null;
     private _packageAndComponentToSource = new Map<string, vscode.Uri>();
+    private _sourceToPackageAndComponent = new Map<string, string>();
+    private _packageAndComponentToReferences = new Map<string, vscode.Location[]>();
 
     async init() {
-        this._packageAndComponentToSource = await this._readAllTheLinks();
+        const result = await this._readAllTheLinks();
+        if (result) {
+            [
+                this._packageAndComponentToSource,
+                this._sourceToPackageAndComponent,
+                this._packageAndComponentToReferences
+            ] = result;
+        }
     }
 
     dispose() {
         this._packageAndComponentToSource.clear();
+        this._sourceToPackageAndComponent.clear();
+        this._packageAndComponentToReferences.clear();
     }
 
-    private async _findFuchsiaBuildDir(): Promise<[vscode.Uri, string] | null> {
-        let baseUri: vscode.Uri | null = null;
+    private async _findFuchsiaBuildDir(): Promise<[vscode.Uri, string] | undefined> {
         for (const folder of (vscode.workspace.workspaceFolders || [])) {
             const buildDirUri = folder.uri.with({ path: folder.uri.path + '/.fx-build-dir' });
             const buildDirDoc = await vscode.workspace.openTextDocument(buildDirUri);
             const buildDir = buildDirDoc.getText().trim();
             return [folder.uri, buildDir];
         }
-        return null;
+        return;
     }
 
-    private async _readAllTheLinks(): Promise<Map<string, vscode.Uri>> {
+    private async _readAllTheLinks(): Promise<[Map<string, vscode.Uri>, Map<string, string>, Map<string, vscode.Location[]>] | undefined> {
         const cmlRegEx = new RegExp([
             /^\s*command\s*=.*\bcmc /,
             /compile \.\.\/\.\.\/(?<path>[^.]*\/(?<componentName>[^/.]+)\.cml)\s*/,
@@ -54,18 +66,40 @@ export class Provider implements vscode.DocumentLinkProvider {
             /--component_manifests \.\.\/\.\.\/(?<path>[^.]*\/(?<componentName>[^/.]+)\.cmx)/,
         ].map(r => r.source).join(''));
 
-        const packageAndComponentToSource = new Map<string, vscode.Uri>();
+        // TODO(richkadel): find links to fuchsia Service declarations in .fidl files, using
+        //   warning, vscode.provideWorkspaceSymbols("**/*.fidl.json") may not have all of these files in the workspace
+        // VS Code API equivalent of:
+        //   $ find ${baseUri}/${buildDir} -name '*fidl.json'
+        // for each matched file:
+        //   $ jq '.interface_declarations[] | .name,.location' ${baseUri}/${buildDir}/fidling/gen/sdk/fidl/fuchsia.logger/fuchsia.logger.fidl.json
+        //   "fuchsia.logger/Log"
+        //   {
+        //       "filename": "../../sdk/fidl/fuchsia.logger/logger.fidl",
+        //       "line": 114,
+        //       "column": 10,
+        //       "length": 3
+        //   }
+        //   "fuchsia.logger/LogSink"
+        //   {
+        //       "filename": "../../sdk/fidl/fuchsia.logger/logger.fidl",
+        //       "line": 140,
+        //       "column": 10,
+        //       "length": 7
+        //   }
 
-        const [baseUri, buildDir] = await this._findFuchsiaBuildDir() ?? [null, ''];
+        const [baseUri, buildDir] = await this._findFuchsiaBuildDir() ?? [];
         if (!baseUri) {
-            return packageAndComponentToSource;
+            return;
         }
 
-        const ninjaTargetsUri = baseUri.with({ path: `${baseUri.path}/${buildDir}/toolchain.ninja` });
-        const stream = fs.createReadStream(ninjaTargetsUri.fsPath);
-        const rl = readline.createInterface(stream);
+        const packageAndComponentToSource = new Map<string, vscode.Uri>();
+        const sourceToPackageAndComponent = new Map<string, string>();
 
-        for await (const line of rl) {
+        const ninjaTargetsUri = baseUri.with({ path: `${baseUri.path}/${buildDir}/toolchain.ninja` });
+        const ninjaStream = fs.createReadStream(ninjaTargetsUri.fsPath);
+        const ninjaReadline = readline.createInterface(ninjaStream);
+
+        for await (const line of ninjaReadline) {
             let match;
             let path;
             let componentName;
@@ -82,9 +116,66 @@ export class Provider implements vscode.DocumentLinkProvider {
                 continue;
             }
             const sourceUri = baseUri.with({ path: `${baseUri.path}/${path}` });
-            packageAndComponentToSource.set(`${packageName}/${componentName}`, sourceUri);
+            const packageAndComponent = `${packageName}/${componentName}`;
+            packageAndComponentToSource.set(packageAndComponent, sourceUri);
+            sourceToPackageAndComponent.set(sourceUri.fsPath, packageAndComponent);
         }
-        return packageAndComponentToSource;
+
+        const packageAndComponentToReferences = new Map<string, vscode.Location[]>();
+
+        let gitGrep = child_process.spawnSync(
+            'git',
+            [
+                '--no-pager',
+                'grep',
+                '--recurse-submodules',
+                '-I',
+                '--extended-regexp',
+                '--line-number',
+                // '--column',
+                // '--only-matching', // grep BUG! --column value is wrong for second match in line
+                '--no-column',
+                '--no-color',
+                'fuchsia.pkg://fuchsia.com/([^#]*)#meta/(-|\\w)*\\.cmx?',
+            ],
+            { cwd: `${baseUri.path}` }
+        );
+
+        const text = gitGrep.stdout.toString();
+
+        // patterns end in either '.cm' or '.cmx'
+        const urlRegEx = /\bfuchsia-pkg:\/\/fuchsia.com\/([-\w]+)(?:\?[^#]*)?#meta\/([-\w]+).cmx?\b/g;
+
+        let start = 0;
+        while (start < text.length) {
+            let end = text.indexOf('\n', start);
+            if (end === -1) {
+                end = text.length;
+            }
+            const line = text.substr(start, end - start);
+            start = end + 1;
+            const [path, lineNumberStr] = line.split(':', 2);
+            const lineNumber: number = (+lineNumberStr) - 1;
+            const matchedLine = line.substr(path.length + 1 + lineNumberStr.length);
+            let match;
+            while ((match = urlRegEx.exec(matchedLine))) {
+                const componentUrl = match[0];
+                const packageName = match[1];
+                const componentName = match[2];
+                const column = match.index - 1;
+                const packageAndComponent = `${packageName}/${componentName}`;
+                const sourceUri = baseUri.with({ path: `${baseUri.path}/${path}` });
+                const range = new vscode.Range(lineNumber, column, lineNumber, column + componentUrl.length);
+                let references = packageAndComponentToReferences.get(packageAndComponent);
+                if (!references) {
+                    references = [];
+                    packageAndComponentToReferences.set(packageAndComponent, references);
+                }
+                references.push(new vscode.Location(sourceUri, range));
+            }
+        }
+
+        return [packageAndComponentToSource, sourceToPackageAndComponent, packageAndComponentToReferences];
     }
 
     provideDocumentLinks(document: vscode.TextDocument, token: vscode.CancellationToken): vscode.DocumentLink[] | undefined {
@@ -99,12 +190,25 @@ export class Provider implements vscode.DocumentLinkProvider {
             const startPos = document.positionAt(match.index);
             const endPos = document.positionAt(match.index + match[0].length);
             const linkRange = new vscode.Range(startPos, endPos);
-            const linkTarget = this._packageAndComponentToSource.get(`${packageName}/${componentName}`) ?? null;
-            if (linkTarget !== null) {
+            const linkTarget = this._packageAndComponentToSource.get(`${packageName}/${componentName}`);
+            if (linkTarget) {
                 links.push(new vscode.DocumentLink(linkRange, linkTarget));
             }
         }
         return links;
+    }
+
+    provideReferences(document: vscode.TextDocument, position: vscode.Position, context: vscode.ReferenceContext, token: vscode.CancellationToken): vscode.Location[] | undefined {
+        const extension = document.uri.path.split('.').slice(-1)[0];
+        if (extension !== 'cml' && extension !== 'cmx') {
+            return;
+        }
+        const references: vscode.Location[] = [];
+        const packageAndComponent = this._sourceToPackageAndComponent.get(document.uri.fsPath);
+        if (!packageAndComponent) {
+            return;
+        }
+        return this._packageAndComponentToReferences.get(packageAndComponent);
     }
 
     // For testing

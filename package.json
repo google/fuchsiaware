@@ -2,7 +2,7 @@
     "name": "fuchsiaware",
     "displayName": "FuchsiAware",
     "description": "Assist browsing Fuchsia OS artifacts, such as by linking from component URLs to component manifests.",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "publisher": "google-fuchsia",
     "license": "MIT",
     "engines": {
