@@ -19,7 +19,18 @@
     ],
     "main": "./out/extension.js",
     "icon": "images/fuchsia-logo-256x256.png",
-    "contributes": {},
+    "contributes": {
+        "languages": [
+            {
+                "id": "fuchsia-component-manifest",
+                "extensions": [
+                    ".cmx",
+                    ".cml",
+                    ".cm"
+                ]
+            }
+        ]
+    },
     "scripts": {
         "vscode:prepublish": "npm run compile",
         "compile": "tsc -p ./",
