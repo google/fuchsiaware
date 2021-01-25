@@ -3,7 +3,7 @@
 This extension recognizes Fuchsia-specific artifacts in the Fuchsia Git-based source repository and
 adds links and references to help navigate them.
 
-* Converts fuchsia comonent URLs (beginning with the `fuchsia-pkg` scheme), in any file, to links
+* Converts fuchsia component URLs (beginning with the `fuchsia-pkg` scheme), in any file, to links
   that open the component's manifest source (either `.cml` or `.cmx`).
 
 ![example-links](images/preview-links.png)

@@ -9,7 +9,7 @@ import { resolveCliPathFromVSCodeExecutablePath } from 'vscode-test';
 export function activate(context: vscode.ExtensionContext) {
   console.log('fuchsia package-to-source links extension is activated');
   const provider = new Provider();
-  provider._init().then(() => {
+  provider.init().then(() => {
     context.subscriptions.push(vscode.Disposable.from(
       vscode.languages.registerDocumentLinkProvider({ scheme: Provider.scheme }, provider),
     ));
@@ -27,7 +27,13 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
   private _sourceToPackageAndComponent = new Map<string, string>();
   private _packageAndComponentToReferences = new Map<string, vscode.Location[]>();
 
-  async _init() {
+  dispose() {
+    this._packageAndComponentToSource.clear();
+    this._sourceToPackageAndComponent.clear();
+    this._packageAndComponentToReferences.clear();
+  }
+
+  async init() {
     const result = await this._findFuchsiaBuildDir();
     if (!result) {
       return;
@@ -45,12 +51,6 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
       this._getLinksToManifests(baseUri, buildDir),
       this._getReferencesToManifests(baseUri, buildDir)
     ]);
-  }
-
-  dispose() {
-    this._packageAndComponentToSource.clear();
-    this._sourceToPackageAndComponent.clear();
-    this._packageAndComponentToReferences.clear();
   }
 
   private async _findFuchsiaBuildDir(): Promise<[vscode.Uri, string] | undefined> {
