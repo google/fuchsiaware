@@ -44,7 +44,7 @@ componentUrl: "fuchsia-pkg://fuchsia.com/some-package?1a2b3c4d5e6f#meta/some-com
 }
 `
       }),
-      'fuchsia-component-manifest',
+      'untitled-fuchsia-manifest',
     );
 
     const docWithComponentUrl = await vscode.workspace.openTextDocument({

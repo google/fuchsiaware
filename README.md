@@ -1,5 +1,5 @@
 # FuchsiAware
-## Fuchsia OS Source Tree Browsing Assistance
+## Fuchsia Source Tree Browsing Assistance
 
 This extension recognizes Fuchsia-specific artifacts in the Fuchsia Git-based source repository
 (also known as `fuchsia.git`) and adds links and references to help navigate them.
