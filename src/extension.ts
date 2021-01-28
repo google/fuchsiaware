@@ -50,13 +50,13 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
 
   static scheme = '*';
 
-  private _packageAndComponentToSource = new Map<string, vscode.Uri>();
-  private _sourceToPackageAndComponent = new Map<string, string>();
+  private _packageAndComponentToSourceUri = new Map<string, vscode.Uri>();
+  private _sourcePathToPackageAndComponent = new Map<string, string>();
   private _packageAndComponentToReferences = new Map<string, vscode.Location[]>();
 
   dispose() {
-    this._packageAndComponentToSource.clear();
-    this._sourceToPackageAndComponent.clear();
+    this._packageAndComponentToSourceUri.clear();
+    this._sourcePathToPackageAndComponent.clear();
     this._packageAndComponentToReferences.clear();
   }
 
@@ -68,57 +68,94 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
 
     const [baseUri, buildDir] = result;
 
-    [
-      [
-        this._packageAndComponentToSource,
-        this._sourceToPackageAndComponent,
-      ],
-      this._packageAndComponentToReferences,
-    ] = await Promise.all([
+    const [linksResult, referencesResult] = await Promise.all([
       this._getLinksToManifests(baseUri, buildDir),
       this._getReferencesToManifests(baseUri, buildDir)
     ]);
+
+    if (!linksResult || !referencesResult) {
+      return false;
+    }
+
+    [
+      this._packageAndComponentToSourceUri,
+      this._sourcePathToPackageAndComponent,
+    ] = linksResult;
+
+    this._packageAndComponentToReferences = referencesResult;
+
     return true;
   }
 
   private async _findFuchsiaBuildDir(): Promise<[vscode.Uri, string] | undefined> {
     const buildDirFilename = '.fx-build-dir';
+    const fuchsiaDirSettingKey = 'fuchsia.rootDirectory';
     if (!vscode.workspace.workspaceFolders) {
       return;
     }
-    const fuchsiaDirFromEnv = process.env.FUCHSIA_DIR || process.env.FUCHSIA_ROOT || null;
-    let fuchsiaSubdirUri;
-    for (const folder of vscode.workspace.workspaceFolders) {
-      const buildDir = await this._readBuildDirDoc(folder.uri, buildDirFilename);
-      if (buildDir) {
-        return [folder.uri, buildDir];
+    let useFuchsiaDirFromEnv = false;
+    let fuchsiaDirFromEnv: string | undefined =
+      vscode.workspace.getConfiguration().get(fuchsiaDirSettingKey);
+    let fuchsiaDirVariable;
+    if (fuchsiaDirFromEnv) {
+      fuchsiaDirVariable = `VS Code setting '${fuchsiaDirSettingKey}'`;
+      useFuchsiaDirFromEnv = true;
+    } else {
+      fuchsiaDirFromEnv = process.env.FUCHSIA_DIR;
+      if (fuchsiaDirFromEnv) {
+        fuchsiaDirVariable = `environment variable '$FUCHSIA_DIR'`;
       } else {
-        if (!fuchsiaSubdirUri && fuchsiaDirFromEnv &&
-          folder.uri.fsPath.startsWith(fuchsiaDirFromEnv)) {
-          fuchsiaSubdirUri = folder.uri;
+        fuchsiaDirFromEnv = process.env.FUCHSIA_ROOT;
+        if (fuchsiaDirFromEnv) {
+          fuchsiaDirVariable = `environment variable '$FUCHSIA_ROOT'`;
         }
       }
     }
-    let fuchsiaDirInfo = 'and neither $FUCHSIA_DIR nor $FUCHSIA_ROOT is set.';
+    let fuchsiaSubdirUri;
+    for (const folder of vscode.workspace.workspaceFolders) {
+      let buildDir;
+      if (!useFuchsiaDirFromEnv || folder.uri.path === fuchsiaDirFromEnv) {
+        buildDir = await this._readBuildDirDoc(folder.uri, buildDirFilename);
+      }
+      if (buildDir) {
+        return [folder.uri, buildDir];
+      } else if (!fuchsiaSubdirUri && fuchsiaDirFromEnv &&
+        folder.uri.fsPath.startsWith(fuchsiaDirFromEnv)) {
+        fuchsiaSubdirUri = folder.uri;
+      }
+    }
+    if (!useFuchsiaDirFromEnv) {
+      info(
+        `Could not find file '${buildDirFilename}' in the root of any workspace folder: \n  ` +
+        vscode.workspace.workspaceFolders.map((folder) => folder.uri).join('\n  ')
+      );
+    }
     if (fuchsiaDirFromEnv) {
       if (fuchsiaSubdirUri) {
         const fuchsiaDirUri = fuchsiaSubdirUri.with({ path: fuchsiaDirFromEnv });
         const buildDir = await this._readBuildDirDoc(fuchsiaDirUri, buildDirFilename);
         if (buildDir) {
+          info(`Loading provider data from ${fuchsiaDirVariable} = '${fuchsiaDirUri}'`);
           return [fuchsiaDirUri, buildDir];
         } else {
-          fuchsiaDirInfo = `nor was it found in $FUCHSIA_DIR/$FUCHSIA_ROOT (${fuchsiaDirUri}).\n`;
+          info(
+            `nor was it found in the directory from ${fuchsiaDirVariable} (${fuchsiaDirUri}).`
+          );
         }
       } else {
-        fuchsiaDirInfo =
-          `nor was any workspace folder found under $FUCHSIA_DIR/$FUCHSIA_ROOT ` +
-          `(${fuchsiaDirFromEnv}).\n`;
+        info(
+          `nor was any workspace folder found under the directory from ${fuchsiaDirVariable} ` +
+          `(${fuchsiaDirFromEnv}).`
+        );
       }
+    } else {
+      info(
+        `and the fuchsia root directory could not be determined from either ` +
+        `settings ('${fuchsiaDirSettingKey}') or an environment variable ($FUCHSIA_DIR or ` +
+        `$FUCHSIA_ROOT.`
+      );
     }
     info(
-      `Could not find file '${buildDirFilename}' in the root of any workspace folder: \n  ` +
-      vscode.workspace.workspaceFolders.map((folder) => folder.uri).join('\n  ') + '\n' +
-      fuchsiaDirInfo +
       `If you have an open workspace for the 'fuchsia.git' source tree, make sure the ` +
       `workspace is rooted at the repository root directory (e.g., 'fuchsia'), and ` +
       'run `fx set ...` or `fx use ...`, then reload the VS Code window.'
@@ -147,7 +184,7 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
   private async _getLinksToManifests(
     baseUri: vscode.Uri,
     buildDir: string
-  ): Promise<[Map<string, vscode.Uri>, Map<string, string>]> {
+  ): Promise<[Map<string, vscode.Uri>, Map<string, string>] | undefined> {
     // TODO(richkadel): Add integration tests to ensure the patterns are found in an actual fuchsia
     // toolchain.ninja file. As build rules sometimes change, these patterns may need to be updated.
 
@@ -160,99 +197,314 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
     // And, consider running GN from the extension, to generate a custom ninja result, with a broad
     // set of targets, but if possible, a narrow set of output targets (only those needed for
     // the extension).
-    const cmlRegEx = new RegExp([
-      /^\s*command\s*=.*\bcmc /,
-      /compile \.\.\/\.\.\/(?<path>[^.]*\/(?<componentName>[^/.]+)\.cml)\s*/,
-      /--output [^.]*\/(?<packageName>[-\w]+)\/[-\w]+.cm/,
-    ].map(r => r.source).join(''));
-    const cmxRegEx = new RegExp([
-      /^\s*command\s*=.*\btools\/cmc\/build\/\w*\.py /,
-      /--component_manifest \.\.\/\.\.\/(?<path>[^ ]*\/(?<componentName>[^/.]+)\.cmx).*/,
-      /--package_manifest [^ ]*\/(?<packageName>[-\w]+?)(?:(?:\.manifest)|(?:(?:_component)?_validate_component_manifest_references_fini_file))/,
-    ].map(r => r.source).join(''));
 
-    const packageAndComponentToSource = new Map<string, vscode.Uri>();
-    const sourceToPackageAndComponent = new Map<string, string>();
+    const componentTargetPathToPackageTargetPath = new Map<string, string>();
+    const componentTargetPathToComponentNameAndManifest = new Map<string, [string, string]>();
+    const packageTargetPathToPackageName = new Map<string, string>();
 
-    const ninjaTargetsUri = baseUri.with({ path: `${baseUri.path}/${buildDir}/toolchain.ninja` });
-    const ninjaStream = fs.createReadStream(ninjaTargetsUri.fsPath);
+    const ninjaFileUri = baseUri.with({ path: `${baseUri.path}/${buildDir}/toolchain.ninja` });
+    const ninjaStream = fs.createReadStream(ninjaFileUri.fsPath);
     ninjaStream.on('error', (err) => {
       error(
-        `Error reading the build dependencies from ${ninjaTargetsUri.fsPath}: '${err}'\n` +
+        `Error reading the build dependencies from ${ninjaFileUri.fsPath}: '${err}'\n` +
         'You may need to re-run `fx set ...` and then reload your VS Code window.'
       );
     });
     const ninjaReadline = readline.createInterface(ninjaStream);
 
-    let loggedAtLeastOneExample = false;
-    let matchedAtLeastOneCmlExample = false;
-    let matchedAtLeastOneCmxExample = false;
+    let matchedAtLeastOneMetaFarExample = false;
+    let matchedAtLeastOneManifestAndComponentExample = false;
+    let matchedAtLeastOnePmBuildExample = false;
 
     for await (const line of ninjaReadline) {
-      let match;
-      let extension;
-      let path;
-      let componentName;
-      let packageName;
-      if ((match = cmlRegEx.exec(line))) {
-        extension = 'cml';
-        path = match[1];
-        componentName = match[2];
-        packageName = match[3];
-      } else if ((match = cmxRegEx.exec(line))) {
-        extension = 'cmx';
-        path = match[1];
-        componentName = match[2];
-        packageName = match[3];
-      } else {
+      let result;
+      if ((result = Provider.extractBuildDirPackageTargetAndComponents(line))) {
+        const [targetBuildDir, packageTarget, componentTargets] = result;
+
+
+        // TODO(richkadel): REMOVE ME! ...
+        if (targetBuildDir.indexOf('go-test-runner') >= 0 ||
+          packageTarget.indexOf('go-test-runner') >= 0) {
+          console.log('break here');
+        }
+
+
+
+        for (const componentTarget of componentTargets) {
+          const packageTargetPath = `${targetBuildDir}:${packageTarget}`;
+          const componentTargetPath = `${targetBuildDir}:${componentTarget}`;
+          if (!matchedAtLeastOneMetaFarExample) {
+            matchedAtLeastOneMetaFarExample = true;
+            info(
+              `Associating packages to components based on build dependencies in ` +
+              `${ninjaFileUri.fsPath}, for example, package '${packageTarget}' will include at ` +
+              `least the component built from ninja target '${componentTargetPath}'.`
+            );
+          }
+          componentTargetPathToPackageTargetPath.set(componentTargetPath, packageTargetPath);
+        }
+      } else if ((result = Provider.extractManifestPathAndCmxComponent(line)) ||
+        (result = Provider.extractManifestPathAndCmlComponent(line))) {
+        const [manifestSourcePath, componentName, componentTargetPath] = result;
+        if (!matchedAtLeastOneManifestAndComponentExample) {
+          matchedAtLeastOneManifestAndComponentExample = true;
+          info(
+            `Matching components to manifests based on build commands in ${ninjaFileUri.fsPath}, ` +
+            `for example, '${manifestSourcePath}' is the manifest source for ` +
+            `a component to be named '${componentName}', and built via ninja target ` +
+            `'${componentTargetPath}'.`
+          );
+        }
+
+
+        // TODO(richkadel): REMOVE ME! ...
+        if (manifestSourcePath.indexOf('go_test_runner') >= 0) {
+          console.log('break here');
+        }
+
+
+
+        // TODO(richkadel): REMOVE ME! ...
+        if (componentTargetPathToComponentNameAndManifest.get(componentTargetPath) &&
+          componentTargetPathToComponentNameAndManifest.get(componentTargetPath) !==
+          [componentName, manifestSourcePath]) {
+          console.log(
+            `conflict: componentTargetPath '${componentTargetPath}' has duplicate entries: ${componentTargetPathToComponentNameAndManifest.get(componentTargetPath)} != ${[componentName, manifestSourcePath]}`
+          );
+        }
+
+
+
+
+        componentTargetPathToComponentNameAndManifest.set(
+          componentTargetPath,
+          [componentName, manifestSourcePath]
+        );
+      } else if ((result = Provider.extractPackage(line))) {
+        const [packageName, packageTargetPath] = result;
+        if (!matchedAtLeastOnePmBuildExample) {
+          matchedAtLeastOnePmBuildExample = true;
+          info(
+            `Matching package targets to package names based on build commands in ${ninjaFileUri.fsPath}, ` +
+            `for example, '${packageTargetPath}' is the build target for ` +
+            `a package to be named '${packageName}',`
+          );
+        }
+
+
+        // TODO(richkadel): REMOVE ME! ...
+        if (packageName.indexOf('go-test-runner') >= 0) {
+          console.log('break here');
+        }
+
+
+
+        // TODO(richkadel): REMOVE ME! ...
+        if (packageTargetPathToPackageName.get(packageTargetPath) &&
+          packageTargetPathToPackageName.get(packageTargetPath) !==
+          packageName) {
+          console.log(
+            `conflict: packageTargetPath '${packageTargetPath}' has duplicate entries: ${packageTargetPathToPackageName.get(packageTargetPath)} != ${packageName}`
+          );
+        }
+
+
+
+
+        packageTargetPathToPackageName.set(packageTargetPath, packageName);
+      }
+    }
+
+    if (!matchedAtLeastOneMetaFarExample) {
+      error(
+        `The ninja build file '${ninjaFileUri.fsPath}' did not contain any lines matching the ` +
+        `expected pattern to identify components in a 'build meta.far' statement: \n\n` +
+        `  metaFarRegEx = ${Provider._metaFarRegEx}\n`
+      );
+      return;
+    } else if (!matchedAtLeastOneManifestAndComponentExample) {
+      error(
+        `The ninja build file '${ninjaFileUri.fsPath}' did not contain any lines matching the ` +
+        `expected pattern to identify components in a 'validate .cmx manifest' command: \n\n` +
+        `  validateCmxRegEx = ${Provider._validateCmxRegEx}\n`
+      );
+      return;
+    } else if (!matchedAtLeastOnePmBuildExample) {
+      error(
+        `The ninja build file '${ninjaFileUri.fsPath}' did not contain any lines matching the ` +
+        `expected pattern to identify components in a 'build package' command: \n\n` +
+        `  pmBuildRegEx = ${Provider._pmBuildRegEx}\n`
+      );
+      return;
+    }
+
+    const packageAndComponentToSourceUri = new Map();
+    const sourcePathToPackageAndComponent = new Map();
+    for (const [componentTarget, packageTargetPath] of componentTargetPathToPackageTargetPath.entries()) {
+      const packageName = packageTargetPathToPackageName.get(packageTargetPath);
+
+
+      // TODO(richkadel): REMOVE ME! ...
+      if (packageTargetPath.indexOf('go_test_runner') >= 0) {
+        console.log('break here');
+      }
+
+
+
+      if (!packageName) {
         continue;
       }
-      const sourceUri = baseUri.with({ path: `${baseUri.path}/${path}` });
+      const values = componentTargetPathToComponentNameAndManifest.get(componentTarget);
+      if (!values) {
+        continue;
+      }
+      const [componentName, manifestSourcePath] = values;
       const packageAndComponent = `${packageName}/${componentName}`;
-      packageAndComponentToSource.set(packageAndComponent, sourceUri);
-      sourceToPackageAndComponent.set(sourceUri.fsPath, packageAndComponent);
-      if (!loggedAtLeastOneExample) {
-        loggedAtLeastOneExample = true;
-        info(
-          `Getting links to manifests, based on build dependencies in ${ninjaTargetsUri.fsPath}, ` +
-          `for example, '${sourceUri.fsPath}' is the manifest source for ` +
-          `package '${packageName}', component '${componentName}'.`
-        );
-      }
-      if (!matchedAtLeastOneCmlExample && extension === 'cml') {
-        matchedAtLeastOneCmlExample = true;
-      }
-      if (!matchedAtLeastOneCmxExample && extension === 'cmx') {
-        matchedAtLeastOneCmxExample = true;
+      const sourcePath = `${baseUri.path}/${manifestSourcePath}`;
+      const sourceUri = baseUri.with({ path: sourcePath });
+      packageAndComponentToSourceUri.set(packageAndComponent, sourceUri);
+      sourcePathToPackageAndComponent.set(sourcePath, packageAndComponent);
+    }
+
+    info('The data required by the DocumentLinkProvider is loaded.');
+    return [packageAndComponentToSourceUri, sourcePathToPackageAndComponent];
+  }
+
+  private static _metaFarRegEx = new RegExp([
+    `^\\s*build\\s*obj/(?<targetBuildDir>[^.]+?)/(?<packageTarget>[-\\w]+)/meta\.far`,
+    `\\s*(?<ignoreOtherOutputs>[^:]+)\\s*:`,
+    `\\s*(?<ignoreNinjaRulename>[^\\s]+)`,
+    `\\s*(?<ignoreInputs>[^|]+)\\|`,
+    `(?<dependencies>(.|\n)*)`,
+  ].join(''));
+
+  static extractBuildDirPackageTargetAndComponents(line: string): [string, string, string[]] | undefined {
+    const match = Provider._metaFarRegEx.exec(line);
+    if (!match) {
+      return;
+    }
+    const [
+      , // full match
+      targetBuildDir,
+      packageTarget,
+      , // ignoreOtherOutputs
+      , // ignoreNinjaRulename
+      , // ignoreInputs
+      dependencies,
+    ] = match;
+
+    // Get all dependencies (global search)
+    const componentTargets = [];
+    const depRegEx = new RegExp([
+      `\\sobj/${targetBuildDir}/(?!${packageTarget}_test_)`,
+      // `(?<componentTarget>[^/]+)`,
+      // `(?!_manifest)(?!_metadata).stamp`,
+      `(?:`,
+      `(?:[^/]+_manifest.stamp)|`,
+      `(?:[^/]+_metadata.stamp)|`,
+      `(?<componentTarget>[^/]+).stamp)`,
+    ].join(''), 'g');
+    let depMatch;
+    while ((depMatch = depRegEx.exec(dependencies))) {
+      if (depMatch[1]) {
+        componentTargets.push(depMatch[1]);
       }
     }
 
-    if (!loggedAtLeastOneExample) {
-      error(
-        `None of the build dependency commands in '${ninjaTargetsUri.fsPath}' matched expected ` +
-        `patterns associating a package and component to its manifest source:\n\n` +
-        `  cmlRegEx = ${cmlRegEx}\n` +
-        `  cmxRegEx = ${cmxRegEx}`
-      );
-    } else if (!matchedAtLeastOneCmlExample) {
-      error(
-        `None of the build dependency commands in '${ninjaTargetsUri.fsPath}' matched expected ` +
-        `patterns associating a package and component to a .cml manifest source:\n\n` +
-        `  cmlRegEx = ${cmlRegEx}\n` +
-        `but other links were found.`
-      );
-    } else if (!matchedAtLeastOneCmxExample) {
-      error(
-        `None of the build dependency commands in '${ninjaTargetsUri.fsPath}' matched expected ` +
-        `patterns associating a package and component to a .cmx manifest source:\n\n` +
-        `  cmxRegEx = ${cmxRegEx}\n` +
-        `but other links were found.`
-      );
-    } else {
-      info('The data required by the DocumentLinkProvider is loaded.');
+    return [
+      targetBuildDir,
+      packageTarget,
+      componentTargets,
+    ];
+  }
+
+  // TODO(richkadel): REMOVE ME! ...
+  //    /(?:.|\n)*?--component_manifest\s*\.\.\/\.\.\/(?<manifestSourcePath>[^\s]*\/(?<componentName>[^/.]+)\.cm[lx]?)/,
+
+  private static _validateCmxRegEx = new RegExp([
+    /^\s*command\s*=(?:.|\n)*?\/validate_component_manifest_references\.py/,
+    /(?:.|\n)*?--component_manifest\s+\.\.\/\.\.\/(?<manifestSourcePath>[^\s]*\/(?<componentName>[^/.]+)\.cmx]?)/,
+    /(?:.|\n)*?--gn-label\s+\/\/(?<targetBuildDir>[^$]+)\$:(?<componentTarget>[-\w]+)_validate_component_manifest_references\b/,
+  ].map(r => r.source).join(''));
+
+  static extractManifestPathAndCmxComponent(line: string): [string, string, string] | undefined {
+    const match = Provider._validateCmxRegEx.exec(line);
+    if (!match) {
+      return;
     }
 
-    return [packageAndComponentToSource, sourceToPackageAndComponent];
+    const [
+      , // full match
+      manifestSourcePath,
+      componentName,
+      targetBuildDir,
+      componentTarget,
+    ] = match;
+
+    const componentTargetPath = `${targetBuildDir}:${componentTarget}`;
+
+    return [
+      manifestSourcePath,
+      componentName,
+      componentTargetPath,
+    ];
+  }
+
+  private static _cmcBuildRegEx = new RegExp([
+    /^\s*command\s*=(?:.|\n)*?\/cmc\s+compile/,
+    /\s+\.\.\/\.\.\/(?<manifestSourcePath>[^.]+\.cml]?)/,
+    /\s+--output\s+obj\/[^\s]+\/(?<componentName>[^/.]+)\.cm\s/,
+    /(?:.|\n)*--depfile\s+obj\/(?<targetBuildDir>[^\s]+)\/(?<componentTarget>[^/.]+)\.d/,
+  ].map(r => r.source).join(''));
+
+  static extractManifestPathAndCmlComponent(line: string): [string, string, string] | undefined {
+    const match = Provider._cmcBuildRegEx.exec(line);
+    if (!match) {
+      return;
+    }
+
+    const [
+      , // full match
+      manifestSourcePath,
+      componentName,
+      targetBuildDir,
+      componentTarget,
+    ] = match;
+
+    const componentTargetPath = `${targetBuildDir}:${componentTarget}`;
+
+    return [
+      manifestSourcePath,
+      componentName,
+      componentTargetPath,
+    ];
+  }
+
+  private static _pmBuildRegEx = new RegExp([
+    /^\s*command\s*=(?:.|\n)*?\/pm/,
+    /\s+-o\s+obj\/(?<targetBuildDir>[^\s]+)\/(?<packageTarget>[^\s]+)\s/,
+    /(?:.|\n)*?-n\s+(?<packageName>[-\w]+)\s/,
+  ].map(r => r.source).join(''));
+
+  static extractPackage(line: string): [string, string] | undefined {
+    const match = Provider._pmBuildRegEx.exec(line);
+    if (!match) {
+      return;
+    }
+
+    const [
+      , // full match
+      targetBuildDir,
+      packageTarget,
+      packageName,
+    ] = match;
+
+    const packageTargetPath = `${targetBuildDir}:${packageTarget}`;
+
+    return [
+      packageName,
+      packageTargetPath,
+    ];
   }
 
   private async _getReferencesToManifests(
@@ -276,8 +528,8 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
     ];
 
     info(
-      `Searching for component URLs ('fuchsia-pkg://...cm[x]') referenced from any text document ` +
-      `in the 'fuchsia.git' repo, by running the command:\n\n` +
+      `Searching for component URLs('fuchsia-pkg://...cm[x]') referenced from any text document ` +
+      `in the 'fuchsia.git' repo, by running the command: \n\n` +
       `  \`git ${gitArgs.join(' ')}\`\n\n` +
       `from the '${baseUri.path}' directory.`
     );
@@ -340,25 +592,34 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
           references = [];
           packageAndComponentToReferences.set(packageAndComponent, references);
         }
+
+
+        // TODO(richkadel): REMOVE ME! ...
+        if (packageAndComponent.indexOf('memfs') >= 0) {
+          console.log('break here');
+        }
+
+
+
         if (!loggedAtLeastOneExample) {
           loggedAtLeastOneExample = true;
-          info(
-            `Getting references to manifests. For example, '${componentUrl}' is referenced by ` +
-            `'${location.uri.fsPath}:` +
-            `${location.range.start.line + 1}:` +
-            `${location.range.start.character + 1}:` +
-            `${location.range.end.line + 1}:` +
-            `${location.range.end.character + 1}`
-          );
+          info([
+            `Getting references to manifests. For example, '${componentUrl}' is referenced by `,
+            `'${location.uri.fsPath}:`,
+            `${location.range.start.line + 1}:`,
+            `${location.range.start.character + 1}:`,
+            `${location.range.end.line + 1}:`,
+            `${location.range.end.character + 1}`,
+          ].join(''));
         }
         references.push(location);
       }
       if (!loggedAtLeastOneExample) {
         loggedAtLeastOneExample = true;
         warn(
-          `Regex failed to match the first line returned from \`git grep\`.\n\n` +
+          `RegEx failed to match the first line returned from \`git grep\`.\n\n` +
           `  Line: '${matchedLine}'\n` +
-          `  Regex: ${urlRegEx}`
+          `  RegEx: ${urlRegEx}`
         );
       }
     }
@@ -412,7 +673,7 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
       const startPos = document.positionAt(match.index);
       const endPos = document.positionAt(match.index + match[0].length);
       const linkRange = new vscode.Range(startPos, endPos);
-      const linkTarget = this._packageAndComponentToSource.get(`${packageName}/${componentName}`);
+      const linkTarget = this._packageAndComponentToSourceUri.get(`${packageName}/${componentName}`);
       if (linkTarget) {
         links.push(new vscode.DocumentLink(linkRange, linkTarget));
       }
@@ -434,7 +695,7 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
       return;
     }
     const references: vscode.Location[] = [];
-    const packageAndComponent = this._sourceToPackageAndComponent.get(document.uri.fsPath);
+    const packageAndComponent = this._sourcePathToPackageAndComponent.get(document.uri.fsPath);
     if (!packageAndComponent) {
       return;
     }
@@ -444,8 +705,8 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
   // For testing
   addLink(packageName: string, componentName: string, manifestUri: vscode.Uri) {
     const packageAndComponent = `${packageName}/${componentName}`;
-    this._packageAndComponentToSource.set(packageAndComponent, manifestUri);
-    this._sourceToPackageAndComponent.set(manifestUri.fsPath, packageAndComponent);
+    this._packageAndComponentToSourceUri.set(packageAndComponent, manifestUri);
+    this._sourcePathToPackageAndComponent.set(manifestUri.fsPath, packageAndComponent);
   }
 
   // For testing

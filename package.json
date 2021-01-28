@@ -20,6 +20,17 @@
     "main": "./out/extension.js",
     "icon": "images/fuchsia-logo-256x256.png",
     "contributes": {
+        "configuration": {
+            "title": "FuchsiAware",
+            "properties": {
+                "fuchsia.rootDirectory": {
+                    "scope": "window",
+                    "type": "string",
+                    "default": "",
+                    "description": "Path to the root directory of the fuchsia.git source code. (Defaults to the workspace folder rooted at a fuchsia.git clone, or environment variable $FUCHSIA_DIR or $FUCHSIA_ROOT.)"
+                }
+            }
+        },
         "languages": [
             {
                 "id": "untitled-fuchsia-manifest",
