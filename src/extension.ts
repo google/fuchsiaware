@@ -3,7 +3,17 @@ import * as child_process from 'child_process';
 import * as fs from 'fs';
 import * as readline from 'readline';
 
+const FUCHSIA_DIR_SETTING_KEY = 'fuchsiAware.fuchsia.rootDirectory';
+const DEBUG = vscode.workspace.getConfiguration().get('fuchsiAware.debug') ?? false;
+
 const fuchsiawareOutput = vscode.window.createOutputChannel('FuchsiAware');
+
+function debug(message: string) {
+  if (DEBUG) {
+    console.log(`DEBUG (fuchsiaware): ${message}`);
+    fuchsiawareOutput.appendLine(`DEBUG: ${message}`);
+  }
+}
 
 function info(message: string) {
   console.log(`INFO (fuchsiaware): ${message}`);
@@ -20,12 +30,6 @@ function error(message: string) {
   console.log(`ERROR (fuchsiaware): ${message}`);
   fuchsiawareOutput.appendLine(`ERROR: ${message}`);
   vscode.window.showErrorMessage(message);
-}
-
-function bug(message: string) {
-  console.log(`BUG (fuchsiaware): ${message}`);
-  fuchsiawareOutput.appendLine(`BUG: ${message}`);
-  vscode.window.showErrorMessage(`BUG: ${message}`);
 }
 
 // this method is called when vs code is activated
@@ -89,16 +93,15 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
 
   private async _findFuchsiaBuildDir(): Promise<[vscode.Uri, string] | undefined> {
     const buildDirFilename = '.fx-build-dir';
-    const fuchsiaDirSettingKey = 'fuchsia.rootDirectory';
     if (!vscode.workspace.workspaceFolders) {
       return;
     }
     let useFuchsiaDirFromEnv = false;
     let fuchsiaDirFromEnv: string | undefined =
-      vscode.workspace.getConfiguration().get(fuchsiaDirSettingKey);
+      vscode.workspace.getConfiguration().get(FUCHSIA_DIR_SETTING_KEY);
     let fuchsiaDirVariable;
     if (fuchsiaDirFromEnv) {
-      fuchsiaDirVariable = `VS Code setting '${fuchsiaDirSettingKey}'`;
+      fuchsiaDirVariable = `VS Code setting '${FUCHSIA_DIR_SETTING_KEY}'`;
       useFuchsiaDirFromEnv = true;
     } else {
       fuchsiaDirFromEnv = process.env.FUCHSIA_DIR;
@@ -151,7 +154,7 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
     } else {
       info(
         `and the fuchsia root directory could not be determined from either ` +
-        `settings ('${fuchsiaDirSettingKey}') or an environment variable ($FUCHSIA_DIR or ` +
+        `settings ('${FUCHSIA_DIR_SETTING_KEY}') or an environment variable ($FUCHSIA_DIR or ` +
         `$FUCHSIA_ROOT.`
       );
     }
@@ -185,20 +188,7 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
     baseUri: vscode.Uri,
     buildDir: string
   ): Promise<[Map<string, vscode.Uri>, Map<string, string>] | undefined> {
-    // TODO(richkadel): Add integration tests to ensure the patterns are found in an actual fuchsia
-    // toolchain.ninja file. As build rules sometimes change, these patterns may need to be updated.
-
-    // TODO(richkadel): These patterns are very fragile and subject to breakage when GN rules
-    // change. Plus, since they only search the results from `fx set`, the results are limited to
-    // the packages in the current set of dependencies (which isn't terrible, but not great for
-    // general browsing, or to find a dependency.)
-    // Alternative 1: Find a better way to query the dependencies.
-    // Alternative 2: Parse the BUILD.gn files (not recommended)
-    // And, consider running GN from the extension, to generate a custom ninja result, with a broad
-    // set of targets, but if possible, a narrow set of output targets (only those needed for
-    // the extension).
-
-    const componentTargetPathToPackageTargetPath = new Map<string, string>();
+    const componentTargetPathToPackageTargetPaths = new Map<string, string[]>();
     const componentTargetPathToComponentNameAndManifest = new Map<string, [string, string]>();
     const packageTargetPathToPackageName = new Map<string, string>();
 
@@ -220,35 +210,31 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
       let result;
       if ((result = Provider.extractBuildDirPackageTargetAndComponents(line))) {
         const [targetBuildDir, packageTarget, componentTargets] = result;
-
-
-        // TODO(richkadel): REMOVE ME! ...
-        if (targetBuildDir.indexOf('go-test-runner') >= 0 ||
-          packageTarget.indexOf('go-test-runner') >= 0) {
-          console.log('break here');
-        }
-
-
-
         for (const componentTarget of componentTargets) {
           const packageTargetPath = `${targetBuildDir}:${packageTarget}`;
           const componentTargetPath = `${targetBuildDir}:${componentTarget}`;
           if (!matchedAtLeastOneMetaFarExample) {
             matchedAtLeastOneMetaFarExample = true;
-            info(
+            debug(
               `Associating packages to components based on build dependencies in ` +
               `${ninjaFileUri.fsPath}, for example, package '${packageTarget}' will include at ` +
               `least the component built from ninja target '${componentTargetPath}'.`
             );
           }
-          componentTargetPathToPackageTargetPath.set(componentTargetPath, packageTargetPath);
+
+          let packageTargetPaths = componentTargetPathToPackageTargetPaths.get(componentTargetPath);
+          if (!packageTargetPaths) {
+            packageTargetPaths = [];
+            componentTargetPathToPackageTargetPaths.set(componentTargetPath, packageTargetPaths);
+          }
+          packageTargetPaths.push(packageTargetPath);
         }
       } else if ((result = Provider.extractManifestPathAndCmxComponent(line)) ||
         (result = Provider.extractManifestPathAndCmlComponent(line))) {
         const [manifestSourcePath, componentName, componentTargetPath] = result;
         if (!matchedAtLeastOneManifestAndComponentExample) {
           matchedAtLeastOneManifestAndComponentExample = true;
-          info(
+          debug(
             `Matching components to manifests based on build commands in ${ninjaFileUri.fsPath}, ` +
             `for example, '${manifestSourcePath}' is the manifest source for ` +
             `a component to be named '${componentName}', and built via ninja target ` +
@@ -256,25 +242,21 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
           );
         }
 
-
-        // TODO(richkadel): REMOVE ME! ...
-        if (manifestSourcePath.indexOf('go_test_runner') >= 0) {
-          console.log('break here');
+        if (DEBUG) {
+          const existing = componentTargetPathToComponentNameAndManifest.get(componentTargetPath);
+          if (existing) {
+            const [origComponentName, origManifestSourcePath] = existing;
+            if (componentName !== origComponentName ||
+              manifestSourcePath !== origManifestSourcePath) {
+              console.warn(
+                `(debug-only check): componentTargetPath '${componentTargetPath}' has duplicate ` +
+                `entries:\n` +
+                `${[origComponentName, origManifestSourcePath]} != ` +
+                `${[componentName, manifestSourcePath]}`
+              );
+            }
+          }
         }
-
-
-
-        // TODO(richkadel): REMOVE ME! ...
-        if (componentTargetPathToComponentNameAndManifest.get(componentTargetPath) &&
-          componentTargetPathToComponentNameAndManifest.get(componentTargetPath) !==
-          [componentName, manifestSourcePath]) {
-          console.log(
-            `conflict: componentTargetPath '${componentTargetPath}' has duplicate entries: ${componentTargetPathToComponentNameAndManifest.get(componentTargetPath)} != ${[componentName, manifestSourcePath]}`
-          );
-        }
-
-
-
 
         componentTargetPathToComponentNameAndManifest.set(
           componentTargetPath,
@@ -284,33 +266,12 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
         const [packageName, packageTargetPath] = result;
         if (!matchedAtLeastOnePmBuildExample) {
           matchedAtLeastOnePmBuildExample = true;
-          info(
-            `Matching package targets to package names based on build commands in ${ninjaFileUri.fsPath}, ` +
-            `for example, '${packageTargetPath}' is the build target for ` +
+          debug(
+            `Matching package targets to package names based on build commands in ` +
+            `${ninjaFileUri.fsPath}, for example, '${packageTargetPath}' is the build target for ` +
             `a package to be named '${packageName}',`
           );
         }
-
-
-        // TODO(richkadel): REMOVE ME! ...
-        if (packageName.indexOf('go-test-runner') >= 0) {
-          console.log('break here');
-        }
-
-
-
-        // TODO(richkadel): REMOVE ME! ...
-        if (packageTargetPathToPackageName.get(packageTargetPath) &&
-          packageTargetPathToPackageName.get(packageTargetPath) !==
-          packageName) {
-          console.log(
-            `conflict: packageTargetPath '${packageTargetPath}' has duplicate entries: ${packageTargetPathToPackageName.get(packageTargetPath)} != ${packageName}`
-          );
-        }
-
-
-
-
         packageTargetPathToPackageName.set(packageTargetPath, packageName);
       }
     }
@@ -340,45 +301,52 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
 
     const packageAndComponentToSourceUri = new Map();
     const sourcePathToPackageAndComponent = new Map();
-    for (const [componentTarget, packageTargetPath] of componentTargetPathToPackageTargetPath.entries()) {
-      const packageName = packageTargetPathToPackageName.get(packageTargetPath);
+    for (
+      const [componentTargetPath, packageTargetPaths]
+      of componentTargetPathToPackageTargetPaths.entries()
+    ) {
+      for (const packageTargetPath of packageTargetPaths) {
+        const packageName = packageTargetPathToPackageName.get(packageTargetPath);
 
-
-      // TODO(richkadel): REMOVE ME! ...
-      if (packageTargetPath.indexOf('go_test_runner') >= 0) {
-        console.log('break here');
+        if (!packageName) {
+          continue;
+        }
+        const values = componentTargetPathToComponentNameAndManifest.get(componentTargetPath);
+        if (!values) {
+          continue;
+        }
+        const [componentName, manifestSourcePath] = values;
+        const packageAndComponent = `${packageName}/${componentName}`;
+        const sourcePath = `${baseUri.path}/${manifestSourcePath}`;
+        const sourceUri = baseUri.with({ path: sourcePath });
+        packageAndComponentToSourceUri.set(packageAndComponent, sourceUri);
+        sourcePathToPackageAndComponent.set(sourcePath, packageAndComponent);
       }
-
-
-
-      if (!packageName) {
-        continue;
-      }
-      const values = componentTargetPathToComponentNameAndManifest.get(componentTarget);
-      if (!values) {
-        continue;
-      }
-      const [componentName, manifestSourcePath] = values;
-      const packageAndComponent = `${packageName}/${componentName}`;
-      const sourcePath = `${baseUri.path}/${manifestSourcePath}`;
-      const sourceUri = baseUri.with({ path: sourcePath });
-      packageAndComponentToSourceUri.set(packageAndComponent, sourceUri);
-      sourcePathToPackageAndComponent.set(sourcePath, packageAndComponent);
     }
 
     info('The data required by the DocumentLinkProvider is loaded.');
     return [packageAndComponentToSourceUri, sourcePathToPackageAndComponent];
   }
 
-  private static _metaFarRegEx = new RegExp([
-    `^\\s*build\\s*obj/(?<targetBuildDir>[^.]+?)/(?<packageTarget>[-\\w]+)/meta\.far`,
-    `\\s*(?<ignoreOtherOutputs>[^:]+)\\s*:`,
-    `\\s*(?<ignoreNinjaRulename>[^\\s]+)`,
-    `\\s*(?<ignoreInputs>[^|]+)\\|`,
-    `(?<dependencies>(.|\n)*)`,
-  ].join(''));
+  // TODO(richkadel): These patterns are very fragile and subject to breakage when GN rules change.
+  // Plus, since they only search the results from `fx set`, the results are limited to the packages
+  // in the current set of dependencies (which isn't terrible, but not great for general browsing,
+  // or to find a dependency.) Alternative 1: Find a better way to query the dependencies.
+  // Alternative 2: Parse the BUILD.gn files (not recommended) And, consider running GN from the
+  // extension, to generate a custom ninja result, with a broad set of targets, but if possible, a
+  // narrow set of output targets (only those needed for the extension).
 
-  static extractBuildDirPackageTargetAndComponents(line: string): [string, string, string[]] | undefined {
+  private static _metaFarRegEx = new RegExp([
+    /^\s*build\s*obj\/(?<targetBuildDir>[^.]+?)\/(?<packageTarget>[-\w]+)\/meta.far/,
+    /\s*(?<ignoreOtherOutputs>[^:]+)\s*:/,
+    /\s*(?<ignoreNinjaRulename>[^\s]+)/,
+    /\s*(?<ignoreInputs>[^|]+)\|/,
+    /(?<dependencies>(.|\n)*)/,
+  ].map(r => r.source).join(''));
+
+  static extractBuildDirPackageTargetAndComponents(
+    line: string
+  ): [string, string, string[]] | undefined {
     const match = Provider._metaFarRegEx.exec(line);
     if (!match) {
       return;
@@ -396,18 +364,33 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
     // Get all dependencies (global search)
     const componentTargets = [];
     const depRegEx = new RegExp([
-      `\\sobj/${targetBuildDir}/(?!${packageTarget}_test_)`,
-      // `(?<componentTarget>[^/]+)`,
-      // `(?!_manifest)(?!_metadata).stamp`,
+      // CAUTION! Since this RegExp is built dynamically, and has at least one capturing group that
+      // spans a wide swath (multiple lines, as structured here), the typical slash-contained
+      // JavaScript RegExp syntax cannot be used. This means ALL BACKSLASHES MUST BE DOUBLED.
+      // Be careful because many editors and parsers do not provide any warnings if you forget
+      // to add the second backslash, but RegExp parsing will mysteriously stop working as
+      // expected:
+      `\\sobj/${targetBuildDir}(?!/${packageTarget}\\.)(?:/(?<componentTargetPrefix>${packageTarget})_)?(?:/)?`,
       `(?:`,
-      `(?:[^/]+_manifest.stamp)|`,
-      `(?:[^/]+_metadata.stamp)|`,
-      `(?<componentTarget>[^/]+).stamp)`,
+      `(?:manifest.stamp)|`,
+      `(?:metadata.stamp)|`,
+      `(?:validate_manifests[^/]+.stamp)|`,
+      `(?:[^\\s]+?_component_index.stamp)|`,
+      `(?<componentTarget>[^/]+)(?:\\.manifest)?\\.stamp`,
+      `)`,
     ].join(''), 'g');
     let depMatch;
     while ((depMatch = depRegEx.exec(dependencies))) {
-      if (depMatch[1]) {
-        componentTargets.push(depMatch[1]);
+      let [
+        , // full match
+        componentTargetPrefix,
+        componentTarget,
+      ] = depMatch;
+      if (componentTarget === 'component' && componentTargetPrefix) {
+        componentTarget = `${componentTargetPrefix}_${componentTarget}`;
+      }
+      if (componentTarget) {
+        componentTargets.push(componentTarget);
       }
     }
 
@@ -418,13 +401,12 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
     ];
   }
 
-  // TODO(richkadel): REMOVE ME! ...
-  //    /(?:.|\n)*?--component_manifest\s*\.\.\/\.\.\/(?<manifestSourcePath>[^\s]*\/(?<componentName>[^/.]+)\.cm[lx]?)/,
-
   private static _validateCmxRegEx = new RegExp([
     /^\s*command\s*=(?:.|\n)*?\/validate_component_manifest_references\.py/,
     /(?:.|\n)*?--component_manifest\s+\.\.\/\.\.\/(?<manifestSourcePath>[^\s]*\/(?<componentName>[^/.]+)\.cmx]?)/,
-    /(?:.|\n)*?--gn-label\s+\/\/(?<targetBuildDir>[^$]+)\$:(?<componentTarget>[-\w]+)_validate_component_manifest_references\b/,
+    /(?:.|\n)*?--gn-label\s+\/\/(?<targetBuildDir>[^$]+)\$:/,
+    /(?<fallbackComponentTarget>[-\w]+)?\b/,
+    /(?:(?:.|\n)*?--stamp\s+[^\s]*?_validate_manifests_(?<prefComponentTarget>[-\w.]+?)?\.action\.stamp\b)?/,
   ].map(r => r.source).join(''));
 
   static extractManifestPathAndCmxComponent(line: string): [string, string, string] | undefined {
@@ -438,8 +420,19 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
       manifestSourcePath,
       componentName,
       targetBuildDir,
-      componentTarget,
+      fallbackComponentTarget,
+      prefComponentTarget,
     ] = match;
+
+    let componentTarget;
+    if (prefComponentTarget) {
+      componentTarget = prefComponentTarget;
+    } else {
+      componentTarget = fallbackComponentTarget.replace(
+        /_validate_component_manifest_references$/,
+        '',
+      );
+    }
 
     const componentTargetPath = `${targetBuildDir}:${componentTarget}`;
 
@@ -454,7 +447,7 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
     /^\s*command\s*=(?:.|\n)*?\/cmc\s+compile/,
     /\s+\.\.\/\.\.\/(?<manifestSourcePath>[^.]+\.cml]?)/,
     /\s+--output\s+obj\/[^\s]+\/(?<componentName>[^/.]+)\.cm\s/,
-    /(?:.|\n)*--depfile\s+obj\/(?<targetBuildDir>[^\s]+)\/(?<componentTarget>[^/.]+)\.d/,
+    /(?:.|\n)*--depfile\s+obj\/(?<targetBuildDir>[^\s]+)\/(?<componentTarget>[^/.]+)(?:\.cm)?\.d/,
   ].map(r => r.source).join(''));
 
   static extractManifestPathAndCmlComponent(line: string): [string, string, string] | undefined {
@@ -519,9 +512,9 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
       '--recurse-submodules',
       '-I',
       '--extended-regexp',
-      '--line-number',
-      // '--column',
       // '--only-matching', // grep BUG! --column value is wrong for second match in line
+      // '--column', // not useful without --only-matching
+      '--line-number',
       '--no-column',
       '--no-color',
       'fuchsia-pkg://fuchsia.com/([^#]*)#meta/(-|\\w)*\\.cmx?',
@@ -592,18 +585,9 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
           references = [];
           packageAndComponentToReferences.set(packageAndComponent, references);
         }
-
-
-        // TODO(richkadel): REMOVE ME! ...
-        if (packageAndComponent.indexOf('memfs') >= 0) {
-          console.log('break here');
-        }
-
-
-
         if (!loggedAtLeastOneExample) {
           loggedAtLeastOneExample = true;
-          info([
+          debug([
             `Getting references to manifests. For example, '${componentUrl}' is referenced by `,
             `'${location.uri.fsPath}:`,
             `${location.range.start.line + 1}:`,
@@ -637,12 +621,13 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
     return packageAndComponentToReferences;
   }
 
-  // TODO(richkadel): find links to fuchsia Service declarations in .fidl files, using
-  //   warning, vscode.provideWorkspaceSymbols("**/*.fidl.json") may not have all of these files in the workspace
-  // VS Code API equivalent of:
+  // TODO(richkadel): find links to fuchsia Service declarations in .fidl files using (I suggest)
+  // a `git` command (since we know this works) equivalent of:
   //   $ find ${baseUri}/${buildDir} -name '*fidl.json'
-  // for each matched file:
-  //   $ jq '.interface_declarations[] | .name,.location' ${baseUri}/${buildDir}/fidling/gen/sdk/fidl/fuchsia.logger/fuchsia.logger.fidl.json
+  //
+  // for each matched file, use VS Code JSON parsing APIs to do the equivalent of:
+  //   $ jq '.interface_declarations[] | .name,.location' \
+  //     ${baseUri}/${buildDir}/fidling/gen/sdk/fidl/fuchsia.logger/fuchsia.logger.fidl.json
   //   "fuchsia.logger/Log"
   //   {
   //       "filename": "../../sdk/fidl/fuchsia.logger/logger.fidl",
@@ -657,6 +642,9 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
   //       "column": 10,
   //       "length": 7
   //   }
+  //
+  // And use that information to add additional service links via the provideDocumentLinks()
+  // meethod:
 
   provideDocumentLinks(
     document: vscode.TextDocument,
@@ -673,7 +661,9 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
       const startPos = document.positionAt(match.index);
       const endPos = document.positionAt(match.index + match[0].length);
       const linkRange = new vscode.Range(startPos, endPos);
-      const linkTarget = this._packageAndComponentToSourceUri.get(`${packageName}/${componentName}`);
+      const linkTarget = this._packageAndComponentToSourceUri.get(
+        `${packageName}/${componentName}`
+      );
       if (linkTarget) {
         links.push(new vscode.DocumentLink(linkRange, linkTarget));
       }

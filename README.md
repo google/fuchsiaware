@@ -18,7 +18,7 @@ This extension recognizes Fuchsia-specific artifacts in the Fuchsia Git-based so
 
 * You can run the `git` command.
 * Your VS Code workspace has exactly one workspace folder that is the root of your cloned `fuchsia`
-  repo.
+  repo. (This can be overridden in VS Code "Settings".)
 * You ran `fx set ...` (or `fx use ...`) to set the current build directory, and generate _Ninja_
   build dependencies.
 
@@ -29,10 +29,6 @@ in the `fuchsia.git` repo to a known component URL.
 
 Note that a component URL is linked only if its manifest is included in the current `fx set ...`
 build configuration.
-
-## Extension Settings
-
-There are currently no settings specific to this extension.
 
 ## Release Notes
 

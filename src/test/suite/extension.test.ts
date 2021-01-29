@@ -8,6 +8,156 @@ suite('Extension Test Suite', () => {
 
   const provider = new fuchsiaware.Provider();
 
+  // TODO(richkadel): Replace these hardcoded copies of specific lines from the `toolchain.ninja`
+  // file with a cached but quickly refreshed copy of the developer's most current `toolchain.ninja`
+  // (at least the subset of lines relevant to this extension). Each 'line' value below can then
+  // be replaced with a regex to pull the specific required line from the cached and current data.
+  // This way the test can validate that the expected format has not changed.
+
+  // TODO(richkadel): Add an integration test that loops throught all extracted packageAndComponent
+  // pairs, formats them into 'fuchsia-pkg://...' URLs, gets the manifest URIs from
+  // provideDocumentLinks(), and validates the files exist. Generate stats for the number of
+  // valid and invalid links.
+
+  test('session_manager_extractBuildDirPackageNameAndComponents', () => {
+    const line = `
+      build
+        obj/src/session/bin/session_manager/session_manager/meta.far
+        obj/src/session/bin/session_manager/session_manager/meta/contents
+        obj/src/session/bin/session_manager/session_manager/meta.far.merkle
+        obj/src/session/bin/session_manager/session_manager/blobs.json
+        obj/src/session/bin/session_manager/session_manager/blobs.manifest
+        obj/src/session/bin/session_manager/session_manager/package_manifest.json:
+      __src_session_bin_session_manager_session_manager___build_toolchain_fuchsia_arm64__rule
+      | ../../build/gn_run_binary.sh
+        obj/src/session/bin/session_manager/session_manager_manifest
+        host_x64/pm
+        obj/src/session/bin/session_manager/session_manager_component.stamp
+        obj/src/session/bin/session_manager/session_manager_manifest.stamp
+        obj/src/session/bin/session_manager/session_manager_metadata.stamp
+        host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
+    `;
+
+    const [
+      targetBuildDir, packageTarget, componentTargets
+    ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
+    assert.strictEqual(targetBuildDir, 'src/session/bin/session_manager');
+    assert.strictEqual(packageTarget, 'session_manager');
+
+    assert.deepStrictEqual(componentTargets, [
+      'session_manager_component',
+    ]);
+  });
+
+  test('ime_keyboard_test_extractBuildDirPackageNameAndComponents', () => {
+    const line = `
+      build
+        obj/src/ui/bin/ime/keyboard_test/meta.far
+        obj/src/ui/bin/ime/keyboard_test/meta/contents
+        obj/src/ui/bin/ime/keyboard_test/meta.far.merkle
+        obj/src/ui/bin/ime/keyboard_test/blobs.json
+        obj/src/ui/bin/ime/keyboard_test/blobs.manifest
+        obj/src/ui/bin/ime/keyboard_test/package_manifest.json:
+      __src_ui_bin_ime_keyboard_test___build_toolchain_fuchsia_arm64__rule
+      | ../../build/gn_run_binary.sh
+        obj/src/ui/bin/ime/keyboard_test.manifest
+        host_x64/pm
+        obj/build/deprecated_package.stamp
+        host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
+        ./default_hardware_ime
+        ./ime_service
+        ./ime_service_integration_test
+        ./keyboard3_integration_test
+        obj/src/ui/bin/ime/keyboard_test.manifest.stamp
+        obj/src/ui/bin/ime/keyboard_test.resource.resource.goldens_en-us.json.stamp
+        obj/src/ui/bin/ime/keyboard_test.resource.resource.us.json.stamp
+        ./keyboard_test_bin
+        obj/src/ui/bin/ime/keyboard_test_default_hardware_ime.cmx.stamp
+        obj/src/ui/bin/ime/keyboard_test_default_hardware_ime.cmx_component_index.stamp
+        obj/src/ui/bin/ime/keyboard_test_ime_service.cmx.stamp
+        obj/src/ui/bin/ime/keyboard_test_ime_service.cmx_component_index.stamp
+        obj/src/ui/bin/ime/keyboard_test_ime_service_integration_test.cmx.stamp
+        obj/src/ui/bin/ime/keyboard_test_ime_service_integration_test.cmx_component_index.stamp
+        obj/src/ui/bin/ime/keyboard_test_keyboard3_integration_test.cmx.stamp
+        obj/src/ui/bin/ime/keyboard_test_keyboard3_integration_test.cmx_component_index.stamp
+        obj/src/ui/bin/ime/keyboard_test_keyboard_test_bin.cmx.stamp
+        obj/src/ui/bin/ime/keyboard_test_keyboard_test_bin.cmx_component_index.stamp
+        obj/src/ui/bin/ime/keyboard_test_metadata.stamp
+        obj/src/ui/bin/ime/keyboard_test_test/ime_service_integration_test_test_spec.stamp
+        obj/src/ui/bin/ime/keyboard_test_test/keyboard3_integration_test_test_spec.stamp
+        obj/src/ui/bin/ime/keyboard_test_test/keyboard_test_bin_test_spec.stamp
+        obj/src/ui/bin/ime/keyboard_test_validate_manifests_default_hardware_ime.cmx.stamp
+        obj/src/ui/bin/ime/keyboard_test_validate_manifests_ime_service.cmx.stamp
+        obj/src/ui/bin/ime/keyboard_test_validate_manifests_ime_service_integration_test.cmx.stamp
+        obj/src/ui/bin/ime/keyboard_test_validate_manifests_keyboard3_integration_test.cmx.stamp
+        obj/src/ui/bin/ime/keyboard_test_validate_manifests_keyboard_test_bin.cmx.stamp
+    `;
+
+    const [
+      targetBuildDir, packageTarget, componentTargets
+    ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
+    assert.strictEqual(targetBuildDir, 'src/ui/bin/ime');
+    assert.strictEqual(packageTarget, 'keyboard_test');
+
+    assert.deepStrictEqual(componentTargets, [
+      'default_hardware_ime.cmx',
+      'ime_service.cmx',
+      'ime_service_integration_test.cmx',
+      'keyboard3_integration_test.cmx',
+      'keyboard_test_bin.cmx',
+    ]);
+  });
+
+  test('inspect_codelab_extractManifestPathAndCmxComponent', () => {
+    const line = `
+      command = /usr/bin/env ../../prebuilt/third_party/python3/mac-x64/bin/python3.8 -S
+        ../../tools/cmc/build/validate_component_manifest_references.py
+        --component_manifest
+          ../../examples/diagnostics/inspect/codelab/cpp/part_1/meta/inspect_cpp_codelab_part_1.cmx
+        --package_manifest
+          obj/examples/diagnostics/inspect/codelab/cpp/inspect_cpp_codelab_integration_tests.manifest
+        --gn-label
+          //examples/diagnostics/inspect/codelab/cpp$:inspect_cpp_codelab_integration_tests\\(//build/toolchain/fuchsia$:arm64\\)
+        --stamp
+          gen/examples/diagnostics/inspect/codelab/cpp/inspect_cpp_codelab_integration_tests_validate_manifests_inspect_cpp_codelab_part_1.cmx.action.stamp
+    `;
+
+    const [
+      manifestSourcePath, componentName, componentTargetPath
+    ] = fuchsiaware.Provider.extractManifestPathAndCmxComponent(line) ?? [];
+    assert.strictEqual(
+      manifestSourcePath,
+      'examples/diagnostics/inspect/codelab/cpp/part_1/meta/inspect_cpp_codelab_part_1.cmx'
+    );
+    assert.strictEqual(componentName, 'inspect_cpp_codelab_part_1');
+    assert.strictEqual(
+      componentTargetPath,
+      'examples/diagnostics/inspect/codelab/cpp:inspect_cpp_codelab_part_1.cmx'
+    );
+  });
+
+  test('fonts_extractManifestPathAndCmxComponent', () => {
+    const line = `
+      command = /usr/bin/env ../../prebuilt/third_party/python3/mac-x64/bin/python3.8 -S
+        ../../tools/cmc/build/validate_component_manifest_references.py
+        --component_manifest
+          ../../src/fonts/meta/fonts.cmx
+        --package_manifest
+          obj/src/fonts/pkg.manifest
+        --gn-label
+          //src/fonts$:pkg\(//build/toolchain/fuchsia$:arm64\)
+        --stamp
+          gen/src/fonts/pkg_validate_manifests_fonts.cmx.action.stamp
+    `;
+
+    const [
+      manifestSourcePath, componentName, componentTargetPath
+    ] = fuchsiaware.Provider.extractManifestPathAndCmxComponent(line) ?? [];
+    assert.strictEqual(manifestSourcePath, 'src/fonts/meta/fonts.cmx');
+    assert.strictEqual(componentName, 'fonts');
+    assert.strictEqual(componentTargetPath, 'src/fonts:fonts.cmx');
+  });
+
   test('go_test_runner_extractBuildDirPackageNameAndComponents', () => {
     const line = ` build
       obj/src/sys/test_runners/gotests/go-test-runner/meta.far
@@ -64,25 +214,6 @@ suite('Extension Test Suite', () => {
     assert.deepStrictEqual(componentTargets, ['elf-test-runner-component']);
   });
 
-  test('elf_extractManifestPathAndCmlComponent', () => {
-    const line = `
-      command = /usr/bin/env ../../build/gn_run_binary.sh
-        ../../prebuilt/third_party/clang/mac-x64/bin
-      host_x64/cmc compile
-        ../../src/sys/test_runners/elf/meta/elf_test_runner.cml
-        --output obj/src/sys/test_runners/elf/elf-test-runner.cm
-        --includepath ../../
-        --depfile obj/src/sys/test_runners/elf/elf-test-runner-component.d
-    `;
-
-    const [
-      manifestSourcePath, componentName, componentTargetPath
-    ] = fuchsiaware.Provider.extractManifestPathAndCmlComponent(line) ?? [];
-    assert.strictEqual(manifestSourcePath, 'src/sys/test_runners/elf/meta/elf_test_runner.cml');
-    assert.strictEqual(componentName, 'elf-test-runner');
-    assert.strictEqual(componentTargetPath, 'src/sys/test_runners/elf:elf-test-runner-component');
-  });
-
   test('extractBuildDirPackageNameAndComponents', () => {
     const line = `
       build
@@ -118,8 +249,163 @@ suite('Extension Test Suite', () => {
 
     assert.deepStrictEqual(componentTargets, [
       'component-manager-boot-env-tests-cmp',
-      'component-manager-tests-cmp'
+      'component-manager-tests-cmp',
+      'test_component-manager-boot-env-tests-cmp',
+      'test_component-manager-tests-cmp',
+      'component_manager_tests_invalid_manifest',
     ]);
+  });
+
+  test('scenic_extractBuildDirPackageNameAndComponents', () => {
+    const line = `
+      build
+        obj/src/ui/scenic/scenic_pkg/meta.far
+        obj/src/ui/scenic/scenic_pkg/meta/contents
+        obj/src/ui/scenic/scenic_pkg/meta.far.merkle
+        obj/src/ui/scenic/scenic_pkg/blobs.json
+        obj/src/ui/scenic/scenic_pkg/blobs.manifest
+        obj/src/ui/scenic/scenic_pkg/package_manifest.json:
+      __src_ui_scenic_scenic_pkg___build_toolchain_fuchsia_arm64__rule
+      | ../../build/gn_run_binary.sh
+        obj/src/ui/scenic/scenic_pkg.manifest
+        host_x64/pm
+        obj/build/deprecated_package.stamp
+        host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
+        obj/src/ui/scenic/scenic_pkg.manifest.stamp
+        obj/src/ui/scenic/scenic_pkg.resource.resource.shaders_shaders_compute_pose_buffer_latching_comp14695981039346656037.spirv.stamp
+        obj/src/ui/scenic/scenic_pkg.resource.resource.shaders_shaders_flatland_flat_main_frag14695981039346656037.spirv.stamp
+        obj/src/ui/scenic/scenic_pkg.resource.resource.shaders_shaders_flatland_flat_main_vert14695981039346656037.spirv.stamp
+        obj/src/ui/scenic/scenic_pkg.resource.resource.shaders_shaders_model_renderer_main_vert12890958529260787213.spirv.stamp
+        obj/src/ui/scenic/scenic_pkg.resource.resource.shaders_shaders_model_renderer_main_vert15064700897732225279.spirv.stamp
+        obj/src/ui/scenic/scenic_pkg.resource.resource.shaders_shaders_model_renderer_main_vert4304586084079301274.spirv.stamp
+        obj/src/ui/scenic/scenic_pkg.resource.resource.shaders_shaders_model_renderer_main_vert7456302057085141907.spirv.stamp
+        obj/src/ui/scenic/scenic_pkg.resource.resource.shaders_shaders_paper_frag_main_ambient_light_frag4304586084079301274.spirv.stamp
+        obj/src/ui/scenic/scenic_pkg.resource.resource.shaders_shaders_paper_frag_main_ambient_light_frag7456302057085141907.spirv.stamp
+        obj/src/ui/scenic/scenic_pkg.resource.resource.shaders_shaders_paper_frag_main_ambient_light_frag9217636760892358205.spirv.stamp
+        obj/src/ui/scenic/scenic_pkg.resource.resource.shaders_shaders_paper_frag_main_point_light_frag15064700897732225279.spirv.stamp
+        obj/src/ui/scenic/scenic_pkg.resource.resource.shaders_shaders_paper_vert_main_shadow_volume_extrude_vert15276133142244279294.spirv.stamp
+        obj/src/ui/scenic/scenic_pkg.resource.resource.shaders_shaders_paper_vert_main_shadow_volume_extrude_vert9217636760892358205.spirv.stamp
+        obj/src/ui/scenic/scenic_pkg.resource.resource.shaders_shaders_test_main_frag12890958529260787213.spirv.stamp
+        obj/src/ui/scenic/scenic_pkg.resource.resource.shaders_shaders_test_main_frag4304586084079301274.spirv.stamp
+        obj/src/ui/scenic/scenic_pkg_metadata.stamp
+        obj/src/ui/scenic/scenic_pkg_scenic.cmx.stamp
+        obj/src/ui/scenic/scenic_pkg_scenic.cmx_component_index.stamp
+        obj/src/ui/scenic/scenic_pkg_validate_manifests_scenic.cmx.stamp
+        ./scenic
+    `;
+
+    const [
+      targetBuildDir, packageTarget, componentTargets
+    ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , ['']];
+    assert.strictEqual(targetBuildDir, 'src/ui/scenic');
+    assert.strictEqual(packageTarget, 'scenic_pkg');
+
+    assert.deepStrictEqual(componentTargets, [
+      'scenic.cmx',
+    ]);
+  });
+
+  test('fonts_extractBuildDirPackageNameAndComponents', () => {
+    const line = `
+      build
+        obj/src/fonts/pkg/meta.far
+        obj/src/fonts/pkg/meta/contents
+        obj/src/fonts/pkg/meta.far.merkle
+        obj/src/fonts/pkg/blobs.json
+        obj/src/fonts/pkg/blobs.manifest
+        obj/src/fonts/pkg/package_manifest.json:
+      __src_fonts_pkg___build_toolchain_fuchsia_arm64__rule
+      | ../../build/gn_run_binary.sh
+        obj/src/fonts/pkg.manifest
+        host_x64/pm
+        obj/build/deprecated_package.stamp
+        ./font_provider
+        obj/src/fonts/pkg.manifest.stamp
+        obj/src/fonts/pkg_fonts.cm.stamp
+        obj/src/fonts/pkg_fonts.cmx.stamp
+        obj/src/fonts/pkg_fonts.cmx_component_index.stamp
+        obj/src/fonts/pkg_fonts_for_downstream_tests.cmx.stamp
+        obj/src/fonts/pkg_fonts_for_downstream_tests.cmx_component_index.stamp
+        obj/src/fonts/pkg_metadata.stamp
+        obj/src/fonts/pkg_validate_manifests_fonts.cm.stamp
+        obj/src/fonts/pkg_validate_manifests_fonts.cmx.stamp
+        obj/src/fonts/pkg_validate_manifests_fonts_for_downstream_tests.cmx.stamp
+        host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
+    `;
+
+    const [
+      targetBuildDir, packageTarget, componentTargets
+    ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
+    assert.strictEqual(targetBuildDir, 'src/fonts');
+    assert.strictEqual(packageTarget, 'pkg');
+
+    assert.deepStrictEqual(componentTargets, [
+      'fonts.cm',
+      'fonts.cmx',
+      'fonts_for_downstream_tests.cmx',
+    ]);
+  });
+
+  test('fonts_extractManifestPathAndCmlComponent', () => {
+    const line = `
+      command = /usr/bin/env ../../build/gn_run_binary.sh ../../prebuilt/third_party/clang/mac-x64/bin
+        host_x64/cmc compile
+          ../../src/fonts/meta/fonts.cml
+        --output
+          obj/src/fonts/pkg_fonts.cm
+        --includepath
+          ../../
+        --depfile
+          obj/src/fonts/pkg_fonts.cm.d
+    `;
+
+    const [
+      manifestSourcePath, componentName, componentTargetPath
+    ] = fuchsiaware.Provider.extractManifestPathAndCmlComponent(line) ?? [];
+    assert.strictEqual(manifestSourcePath, 'src/fonts/meta/fonts.cml');
+    assert.strictEqual(componentName, 'pkg_fonts');
+    assert.strictEqual(componentTargetPath, 'src/fonts:pkg_fonts');
+  });
+
+  test('scenic_extractManifestPathAndCmxComponent', () => {
+    const line = `
+      command = /usr/bin/env ../../prebuilt/third_party/python3/mac-x64/bin/python3.8 -S
+        ../../tools/cmc/build/validate_component_manifest_references.py
+        --component_manifest
+          ../../src/ui/scenic/bin/meta/scenic.cmx
+        --package_manifest
+          obj/src/ui/scenic/scenic_pkg.manifest
+        --gn-label
+          //src/ui/scenic$:scenic_pkg\(//build/toolchain/fuchsia$:arm64\)
+        --stamp
+          gen/src/ui/scenic/scenic_pkg_validate_manifests_scenic.cmx.action.stamp
+    `;
+
+    const [
+      manifestSourcePath, componentName, componentTargetPath
+    ] = fuchsiaware.Provider.extractManifestPathAndCmxComponent(line) ?? [];
+    assert.strictEqual(manifestSourcePath, 'src/ui/scenic/bin/meta/scenic.cmx');
+    assert.strictEqual(componentName, 'scenic');
+    assert.strictEqual(componentTargetPath, 'src/ui/scenic:scenic.cmx');
+  });
+
+  test('elf_extractManifestPathAndCmlComponent', () => {
+    const line = `
+      command = /usr/bin/env ../../build/gn_run_binary.sh
+        ../../prebuilt/third_party/clang/mac-x64/bin
+      host_x64/cmc compile
+        ../../src/sys/test_runners/elf/meta/elf_test_runner.cml
+        --output obj/src/sys/test_runners/elf/elf-test-runner.cm
+        --includepath ../../
+        --depfile obj/src/sys/test_runners/elf/elf-test-runner-component.d
+    `;
+
+    const [
+      manifestSourcePath, componentName, componentTargetPath
+    ] = fuchsiaware.Provider.extractManifestPathAndCmlComponent(line) ?? [];
+    assert.strictEqual(manifestSourcePath, 'src/sys/test_runners/elf/meta/elf_test_runner.cml');
+    assert.strictEqual(componentName, 'elf-test-runner');
+    assert.strictEqual(componentTargetPath, 'src/sys/test_runners/elf:elf-test-runner-component');
   });
 
   test('extractManifestPathAndCmxComponent', () => {
