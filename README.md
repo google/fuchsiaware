@@ -1,16 +1,20 @@
 # FuchsiAware
 ## Fuchsia Source Tree Browsing Assistance
 
-This extension recognizes Fuchsia-specific artifacts in the Fuchsia Git-based source repository
-(also known as `fuchsia.git`) and adds links and references to help navigate them.
+This extension provides additional support to developers working with the source code for the
+open source [Fuchsia](https://fuchsia.dev) operating system.
 
-* Converts fuchsia component URLs (beginning with the `fuchsia-pkg` scheme), in any file, to links
-  that open the component's manifest source (either `.cml` or `.cmx`).
+The extension recognizes Fuchsia-specific artifacts in the Fuchsia Git-based source repository
+(also known as `fuchsia.git`), and adds features to help navigate them, such as:
+
+* Links from fuchsia component URLs (beginning with the `fuchsia-pkg` scheme), in any file, to the
+  component's "manifest" source file (either `.cml` or `.cmx`).
 
 ![example-links](images/preview-links.png)
 
-* Supports the inverse action by finding references to an open manifest, via it's component URL.
-  Right-click a file and select menu option "Go to References" or "Find References".
+* References back from the manifest to any known source with a `fuchsia-pkg` component URL to the
+  manifest's component. Right-click anywhere in the manifest source (in the VS Code editor), and
+  select one of the menu options "Go to References" or "Find References".
 
 ![example-references](images/preview-references.png)
 

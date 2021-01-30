@@ -402,11 +402,14 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
   }
 
   private static _validateCmxRegEx = new RegExp([
-    /^\s*command\s*=(?:.|\n)*?\/validate_component_manifest_references\.py/,
-    /(?:.|\n)*?--component_manifest\s+\.\.\/\.\.\/(?<manifestSourcePath>[^\s]*\/(?<componentName>[^/.]+)\.cmx]?)/,
+    /^\s*command\s*=(?:.|\n)*?host_\w+\/cmc\s/,
+    // Note: The next regex is optional, and `prefComponentTarget` will be undefined, if
+    // '_validate_manifests_' is not part of the `--stamp` string.
+    /(?:(?:.|\n)*?--stamp\s+[^\s]*?_validate_manifests_(?<prefComponentTarget>[-\w.]+?)?\.action\.stamp\b)?/,
+    /(?:.|\n)*?\svalidate-references/,
+    /(?:.|\n)*?--component-manifest\s+\.\.\/\.\.\/(?<manifestSourcePath>[^\s]*\/(?<componentName>[^/.]+)\.cmx]?)/,
     /(?:.|\n)*?--gn-label\s+\/\/(?<targetBuildDir>[^$]+)\$:/,
     /(?<fallbackComponentTarget>[-\w]+)?\b/,
-    /(?:(?:.|\n)*?--stamp\s+[^\s]*?_validate_manifests_(?<prefComponentTarget>[-\w.]+?)?\.action\.stamp\b)?/,
   ].map(r => r.source).join(''));
 
   static extractManifestPathAndCmxComponent(line: string): [string, string, string] | undefined {
@@ -417,11 +420,11 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
 
     const [
       , // full match
+      prefComponentTarget,
       manifestSourcePath,
       componentName,
       targetBuildDir,
       fallbackComponentTarget,
-      prefComponentTarget,
     ] = match;
 
     let componentTarget;
@@ -429,7 +432,7 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
       componentTarget = prefComponentTarget;
     } else {
       componentTarget = fallbackComponentTarget.replace(
-        /_validate_component_manifest_references$/,
+        /_cmc_validate_references$/,
         '',
       );
     }
