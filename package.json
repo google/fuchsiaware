@@ -3,8 +3,8 @@
     "displayName": "FuchsiAware",
     "description": "Assist browsing Fuchsia artifacts, such as by linking from component URLs to component manifests.",
     "version": "0.0.3",
-    "publisher": "google-fuchsia",
-    "license": "MIT",
+    "publisher": "RichKadel",
+    "license": "Apache-2.0",
     "engines": {
         "vscode": "^1.52.0"
     },
