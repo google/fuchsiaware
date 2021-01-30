@@ -2,7 +2,7 @@
     "name": "fuchsiaware",
     "displayName": "FuchsiAware",
     "description": "Assist browsing Fuchsia artifacts, such as by linking from component URLs to component manifests.",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "publisher": "RichKadel",
     "license": "Apache-2.0",
     "engines": {
@@ -28,6 +28,12 @@
                     "type": "string",
                     "default": "",
                     "description": "Path to the root directory of the fuchsia.git source code. (Defaults to the workspace folder rooted at a fuchsia.git clone, or environment variable $FUCHSIA_DIR or $FUCHSIA_ROOT.)"
+                },
+                "fuchsiAware.showUnresolvedTerminalLinks": {
+                    "scope": "window",
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Highlights every 'fuchsia.pkg://...' component URL, even if the associated component manifest is unknown. (The link tooltip will denote resolved versus unknown manifests, before clicking.)"
                 },
                 "fuchsiAware.debug": {
                     "scope": "window",

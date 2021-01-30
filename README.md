@@ -10,13 +10,18 @@ The extension recognizes Fuchsia-specific artifacts in the Fuchsia Git-based sou
 * Links from fuchsia component URLs (beginning with the `fuchsia-pkg` scheme), in any file, to the
   component's "manifest" source file (either `.cml` or `.cmx`).
 
-![example-links](images/preview-links.png)
+![example-links](images/document-links.png)
+
+* Links from fuchsia component URLs (beginning with the `fuchsia-pkg` scheme) in terminal output.
+  component's "manifest" source file (either `.cml` or `.cmx`).
+
+![example-links](images/terminal-links.png)
 
 * References back from the manifest to any known source with a `fuchsia-pkg` component URL to the
   manifest's component. Right-click anywhere in the manifest source (in the VS Code editor), and
   select one of the menu options "Go to References" or "Find References".
 
-![example-references](images/preview-references.png)
+![example-references](images/references.png)
 
 ## Minimum Requirements and Implementation Details
 

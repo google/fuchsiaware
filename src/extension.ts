@@ -18,6 +18,9 @@ import * as fs from 'fs';
 import * as readline from 'readline';
 
 const FUCHSIA_DIR_SETTING_KEY = 'fuchsiAware.fuchsia.rootDirectory';
+const SHOW_UNRESOLVED_TERMINAL_LINKS = vscode.workspace.getConfiguration().get(
+  'fuchsiAware.showUnresolvedTerminalLinks'
+) ?? false;
 const DEBUG = vscode.workspace.getConfiguration().get('fuchsiAware.debug') ?? false;
 
 const fuchsiawareOutput = vscode.window.createOutputChannel('FuchsiAware');
@@ -57,6 +60,10 @@ export function activate(context: vscode.ExtensionContext) {
       ));
       info('The DocumentLinkProvider is initialized and registered.');
       context.subscriptions.push(vscode.Disposable.from(
+        vscode.window.registerTerminalLinkProvider(provider),
+      ));
+      info('The TerminalLinkProvider is initialized and registered.');
+      context.subscriptions.push(vscode.Disposable.from(
         vscode.languages.registerReferenceProvider({ scheme: Provider.scheme }, provider),
       ));
       info('The ReferenceProvider is initialized and registered.');
@@ -64,7 +71,14 @@ export function activate(context: vscode.ExtensionContext) {
   });
 }
 
-export class Provider implements vscode.DocumentLinkProvider, vscode.ReferenceProvider {
+interface ComponentUrlTerminalLink extends vscode.TerminalLink {
+  documentUri?: vscode.Uri;
+}
+
+export class Provider implements
+  vscode.DocumentLinkProvider,
+  vscode.TerminalLinkProvider,
+  vscode.ReferenceProvider {
 
   static scheme = '*';
 
@@ -678,11 +692,11 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
       const startPos = document.positionAt(match.index);
       const endPos = document.positionAt(match.index + match[0].length);
       const linkRange = new vscode.Range(startPos, endPos);
-      const linkTarget = this._packageAndComponentToSourceUri.get(
+      const documentUri = this._packageAndComponentToSourceUri.get(
         `${packageName}/${componentName}`
       );
-      if (linkTarget) {
-        links.push(new vscode.DocumentLink(linkRange, linkTarget));
+      if (documentUri) {
+        links.push(new vscode.DocumentLink(linkRange, documentUri));
       }
     }
     return links;
@@ -707,6 +721,50 @@ export class Provider implements vscode.DocumentLinkProvider, vscode.ReferencePr
       return;
     }
     return this._packageAndComponentToReferences.get(packageAndComponent);
+  }
+
+  provideTerminalLinks(
+    context: vscode.TerminalLinkContext,
+    token: vscode.CancellationToken
+  ): vscode.TerminalLink[] | undefined {
+    const regEx = /\bfuchsia-pkg:\/\/fuchsia.com\/([-\w]+)(?:\?[^#]*)?#meta\/([-\w]+).cmx?\b/g;
+    //const links: { startIndex: number, length: number, packageName: string, componentName: string }[] = [];
+    const links: ComponentUrlTerminalLink[] = [];
+    let match;
+    while ((match = regEx.exec(context.line))) {
+      const startIndex = match.index;
+      const [
+        link,
+        packageName,
+        componentName,
+      ] = match;
+      const documentUri = this._packageAndComponentToSourceUri.get(
+        `${packageName}/${componentName}`
+      );
+      let tooltip;
+      if (documentUri) {
+        tooltip = 'Open component manifest';
+      } else if (SHOW_UNRESOLVED_TERMINAL_LINKS) {
+        tooltip = 'Manifest not found!';
+      } else {
+        continue; // don't add the link
+      }
+      links.push({
+        startIndex,
+        length: link.length,
+        tooltip,
+        documentUri,
+      });
+    }
+    return links;
+  }
+
+  handleTerminalLink(link: ComponentUrlTerminalLink) {
+    if (link.documentUri) {
+      const document = vscode.workspace.openTextDocument(link.documentUri).then(document => {
+        vscode.window.showTextDocument(document);
+      });
+    }
   }
 
   // For testing

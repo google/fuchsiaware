@@ -4,8 +4,9 @@ All notable changes to the "fuchsiaware" extension will be documented in this fi
 
 ## [0.0.1]
 
-- Initial release: Links
-  * Links Fuchsia component URLs to manifests (with extensions .cml or .cmx).
+- Initial release: Document Links
+  * Links Fuchsia component URLs (beginning with `fuchsia-pkg://fuchsia.com/...`) in a document text
+    to component manifests (files with extensions .cml or .cmx).
 
 ## [0.0.2]
 
@@ -21,3 +22,9 @@ All notable changes to the "fuchsiaware" extension will be documented in this fi
 - Fixes:
   * The data extraction patterns have improved, enabling a significant number of additional package
     links.
+
+## [0.0.4]
+
+- New feature: Terminal Links
+  * Links Fuchsia component URLs (beginning with `fuchsia-pkg://fuchsia.com/...`) in the terminal
+    to component manifests (files with extensions .cml or .cmx).
