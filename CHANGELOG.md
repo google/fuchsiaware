@@ -33,3 +33,8 @@ All notable changes to the "fuchsiaware" extension will be documented in this fi
 
 - Fixes:
   * Added more patterns and heuristics to resolve more component URLs to their manifests.
+
+## [0.0.6]
+
+- Fixes:
+  * Published to marketplace
