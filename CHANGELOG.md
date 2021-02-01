@@ -28,3 +28,8 @@ All notable changes to the "fuchsiaware" extension will be documented in this fi
 - New feature: Terminal Links
   * Links Fuchsia component URLs (beginning with `fuchsia-pkg://fuchsia.com/...`) in the terminal
     to component manifests (files with extensions .cml or .cmx).
+
+## [0.0.5]
+
+- Fixes:
+  * Added more patterns and heuristics to resolve more component URLs to their manifests.

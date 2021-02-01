@@ -2,7 +2,7 @@
     "name": "fuchsiaware",
     "displayName": "FuchsiAware",
     "description": "Assist browsing Fuchsia artifacts, such as by linking from component URLs to component manifests.",
-    "version": "0.0.4",
+    "version": "0.0.5",
     "publisher": "RichKadel",
     "license": "Apache-2.0",
     "engines": {
@@ -34,6 +34,18 @@
                     "type": "boolean",
                     "default": false,
                     "description": "Highlights every 'fuchsia.pkg://...' component URL, even if the associated component manifest is unknown. (The link tooltip will denote resolved versus unknown manifests, before clicking.)"
+                },
+                "fuchsiAware.normalizeWordSeparators": {
+                    "scope": "window",
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Ignores differences between dashes and underscores comparing URLs. This can help resolve additional links to manifests, but in rare cases may link a component URL to the wrong manifest."
+                },
+                "fuchsiAware.useHeuristicsToFindMoreLinks": {
+                    "scope": "window",
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Applies additional patterns to match component URLs to manifests that are based on common patterns, but not easily validated. This can help resolve additional links, but may link a component URL to the wrong manifest."
                 },
                 "fuchsiAware.debug": {
                     "scope": "window",

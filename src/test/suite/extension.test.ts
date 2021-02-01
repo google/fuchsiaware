@@ -15,14 +15,14 @@
 import * as assert from 'assert';
 
 import * as vscode from 'vscode';
-import * as fuchsiaware from '../../extension';
+import { Provider } from '../../provider';
 
 suite('Extension Test Suite', () => {
   vscode.window.showInformationMessage('Start all tests.');
 
   const baseUri = vscode.Uri.file('fuchsia');
   const buildDir = 'out/default.test';
-  const provider = new fuchsiaware.Provider(baseUri, buildDir);
+  const provider = new Provider(baseUri, buildDir);
 
   // TODO(richkadel): Replace these hardcoded copies of specific lines from the `toolchain.ninja`
   // file with a cached but quickly refreshed copy of the developer's most current `toolchain.ninja`
@@ -57,10 +57,16 @@ gen/src/devices/tests/libdriver-integration-test/libdriver-integration-test_comp
 
     const [
       manifestSourcePath, componentName, componentTargetPath
-    ] = fuchsiaware.Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
-    assert.strictEqual(manifestSourcePath, `../../${buildDir}/src/devices/tests/libdriver-integration-test/libdriver-integration-test_component_generated_manifest.cmx`);
+    ] = Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
+    assert.strictEqual(
+      manifestSourcePath,
+      `../../${buildDir}/src/devices/tests/libdriver-integration-test/libdriver-integration-test_component_generated_manifest.cmx`
+    );
     assert.strictEqual(componentName, 'libdriver-integration-test_component_generated_manifest');
-    assert.strictEqual(componentTargetPath, 'src/devices/tests/libdriver-integration-test:libdriver-integration-test_component');
+    assert.strictEqual(
+      componentTargetPath,
+      'src/devices/tests/libdriver-integration-test:libdriver-integration-test_component'
+    );
   });
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -89,7 +95,7 @@ host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
       targetBuildDir,
       packageTarget,
       componentTargets,
-    ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
+    ] = Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
     assert.strictEqual(targetBuildDir, 'src/devices/tests/libdriver-integration-test');
     assert.strictEqual(packageTarget, 'libdriver-integration-test');
     assert.deepStrictEqual(componentTargets, [
@@ -128,7 +134,7 @@ host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
       targetBuildDir,
       packageTarget,
       componentTargets,
-    ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
+    ] = Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
     assert.strictEqual(targetBuildDir, 'src/devices/bin/driver_manager');
     assert.strictEqual(packageTarget, 'driver-manager-tests');
     assert.deepStrictEqual(componentTargets, [
@@ -167,8 +173,11 @@ host_x64/cmc
       targetBuildDir,
       componentTarget,
       subComponentTargets,
-    ] = fuchsiaware.Provider.extractSubComponents(line) ?? [, , []];
-    assert.strictEqual(manifestSourcePath, 'src/diagnostics/archivist/tests/archive_path/archive_path.cmx');
+    ] = Provider.extractSubComponents(line) ?? [, , []];
+    assert.strictEqual(
+      manifestSourcePath,
+      'src/diagnostics/archivist/tests/archive_path/archive_path.cmx'
+    );
     assert.strictEqual(targetBuildDir, 'src/diagnostics/archivist/tests/archive_path');
     assert.strictEqual(componentTarget, 'archive_path');
     assert.deepStrictEqual(subComponentTargets, [
@@ -177,8 +186,10 @@ host_x64/cmc
   });
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
-  test('archivist_integration_tests_archive_path_test_extractManifestPathAndComponentFromCmcValidate', () => {
-    const line = `
+  test(
+    'archivist_integration_tests_archive_path_test_extractManifestPathAndComponentFromCmcValidate',
+    () => {
+      const line = `
 command
 =
 /usr/bin/env
@@ -196,13 +207,20 @@ gen/src/diagnostics/archivist/tests/archive_path/archive_path_test_archivist_cmc
 //src/diagnostics/archivist/tests/archive_path$:archive_path_test_archivist_cmc_validate_references\(//build/toolchain/fuchsia$:arm64\)
     `;
 
-    const [
-      manifestSourcePath, componentName, componentTargetPath
-    ] = fuchsiaware.Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
-    assert.strictEqual(manifestSourcePath, 'src/diagnostics/archivist/tests/archive_path/meta/archive_path_test_archivist.cmx');
-    assert.strictEqual(componentName, 'archive_path_test_archivist');
-    assert.strictEqual(componentTargetPath, 'src/diagnostics/archivist/tests/archive_path:archive_path_test_archivist');
-  });
+      const [
+        manifestSourcePath, componentName, componentTargetPath
+      ] = Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
+      assert.strictEqual(
+        manifestSourcePath,
+        'src/diagnostics/archivist/tests/archive_path/meta/archive_path_test_archivist.cmx'
+      );
+      assert.strictEqual(componentName, 'archive_path_test_archivist');
+      assert.strictEqual(
+        componentTargetPath,
+        'src/diagnostics/archivist/tests/archive_path:archive_path_test_archivist'
+      );
+    }
+  );
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
   test('archivist_integration_tests_extractBuildDirPackageTargetAndComponents', () => {
@@ -233,7 +251,7 @@ host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
       targetBuildDir,
       packageTarget,
       componentTargets,
-    ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
+    ] = Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
     assert.strictEqual(targetBuildDir, 'src/diagnostics/archivist/tests');
     assert.strictEqual(packageTarget, 'archivist-integration-tests');
     assert.deepStrictEqual(componentTargets, [
@@ -267,7 +285,7 @@ host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
 
     const [
       targetBuildDir, packageTarget, componentTargets,
-    ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
+    ] = Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
     assert.strictEqual(targetBuildDir, 'src/session/bin/session_manager');
     assert.strictEqual(packageTarget, 'session_manager');
     assert.deepStrictEqual(componentTargets, [
@@ -322,7 +340,7 @@ obj/src/ui/bin/ime/keyboard_test_validate_manifests_keyboard_test_bin.cmx.stamp
 
     const [
       targetBuildDir, packageTarget, componentTargets,
-    ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
+    ] = Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
     assert.strictEqual(targetBuildDir, 'src/ui/bin/ime');
     assert.strictEqual(packageTarget, 'keyboard_test');
     assert.deepStrictEqual(componentTargets, [
@@ -359,7 +377,7 @@ gen/examples/diagnostics/inspect/codelab/cpp/part_1/tests/inspect_cpp_codelab_pa
 
     const [
       manifestSourcePath, componentName, componentTargetPath
-    ] = fuchsiaware.Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
+    ] = Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
     assert.strictEqual(
       manifestSourcePath,
       'examples/diagnostics/inspect/codelab/cpp/part_1/tests/integration_part_1.cmx'
@@ -398,7 +416,7 @@ obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2/package_ma
 
     const [
       packageName, packageTargetPath
-    ] = fuchsiaware.Provider.extractPackage(line) ?? [];
+    ] = Provider.extractPackage(line) ?? [];
     assert.strictEqual(packageName, 'archivist-integration-tests-v2');
     assert.strictEqual(
       packageTargetPath,
@@ -428,8 +446,11 @@ obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2.manifest
 
     const [
       manifestSourcePath, componentName, componentTargetPath
-    ] = fuchsiaware.Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
-    assert.strictEqual(manifestSourcePath, 'src/diagnostics/archivist/tests/v2/meta/archivist_for_integration.cml');
+    ] = Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
+    assert.strictEqual(
+      manifestSourcePath,
+      'src/diagnostics/archivist/tests/v2/meta/archivist_for_integration.cml'
+    );
     assert.strictEqual(componentName, 'archivist');
     assert.strictEqual(componentTargetPath, 'src/diagnostics/archivist/tests/v2:archivist.cm');
   });
@@ -456,7 +477,7 @@ obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2.manifest
 
     const [
       manifestSourcePath, componentName, componentTargetPath
-    ] = fuchsiaware.Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
+    ] = Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
     assert.strictEqual(manifestSourcePath, 'src/diagnostics/archivist/tests/v2/meta/driver.cml');
     assert.strictEqual(componentName, 'driver');
     assert.strictEqual(componentTargetPath, 'src/diagnostics/archivist/tests/v2:driver.cm');
@@ -483,8 +504,11 @@ obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2_archivist_
 
     const [
       manifestSourcePath, componentName, componentTargetPath
-    ] = fuchsiaware.Provider.extractManifestPathAndCmlComponent(line) ?? [];
-    assert.strictEqual(manifestSourcePath, 'src/diagnostics/archivist/tests/v2/meta/archivist_integration_tests.cml');
+    ] = Provider.extractManifestPathAndCmlComponent(line) ?? [];
+    assert.strictEqual(
+      manifestSourcePath,
+      'src/diagnostics/archivist/tests/v2/meta/archivist_integration_tests.cml'
+      );
     assert.strictEqual(componentName, 'archivist-integration-tests-v2_archivist_integration_tests');
     // THIS SEEMS WRONG:
     assert.strictEqual(
@@ -529,7 +553,7 @@ host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
 
     const [
       targetBuildDir, packageTarget, componentTargets,
-    ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
+    ] = Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
     assert.strictEqual(targetBuildDir, 'src/diagnostics/archivist/tests/v2');
     assert.strictEqual(packageTarget, 'archivist-integration-tests-v2');
     assert.deepStrictEqual(componentTargets, [
@@ -563,7 +587,7 @@ obj/src/fonts/pkg.manifest
 
     const [
       manifestSourcePath, componentName, componentTargetPath
-    ] = fuchsiaware.Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
+    ] = Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
     assert.strictEqual(manifestSourcePath, 'src/fonts/meta/fonts.cmx');
     assert.strictEqual(componentName, 'fonts');
     assert.strictEqual(componentTargetPath, 'src/fonts:fonts.cmx');
@@ -592,7 +616,7 @@ obj/src/sys/test_runners/gotests/go_test_runner.stamp
 
     const [
       targetBuildDir, packageTarget, componentTargets,
-    ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
+    ] = Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
     assert.strictEqual(targetBuildDir, 'src/sys/test_runners/gotests');
     assert.strictEqual(packageTarget, 'go-test-runner');
     assert.deepStrictEqual(componentTargets, ['go_test_runner']);
@@ -621,7 +645,7 @@ obj/src/sys/test_runners/elf/elf-test-runner_metadata.stamp
 
     const [
       targetBuildDir, packageTarget, componentTargets,
-    ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
+    ] = Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
     assert.strictEqual(targetBuildDir, 'src/sys/test_runners/elf');
     assert.strictEqual(packageTarget, 'elf-test-runner');
     assert.deepStrictEqual(componentTargets, ['elf-test-runner-component']);
@@ -658,7 +682,7 @@ host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
 
     const [
       targetBuildDir, packageTarget, componentTargets,
-    ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
+    ] = Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
     assert.strictEqual(targetBuildDir, 'src/sys/component_manager');
     assert.strictEqual(packageTarget, 'component-manager-tests');
     assert.deepStrictEqual(componentTargets, [
@@ -712,7 +736,7 @@ obj/src/ui/scenic/scenic_pkg_validate_manifests_scenic.cmx.stamp
 
     const [
       targetBuildDir, packageTarget, componentTargets,
-    ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , ['']];
+    ] = Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , ['']];
     assert.strictEqual(targetBuildDir, 'src/ui/scenic');
     assert.strictEqual(packageTarget, 'scenic_pkg');
     assert.deepStrictEqual(componentTargets, [
@@ -752,7 +776,7 @@ host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
 
     const [
       targetBuildDir, packageTarget, componentTargets,
-    ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
+    ] = Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
     assert.strictEqual(targetBuildDir, 'src/fonts');
     assert.strictEqual(packageTarget, 'pkg');
     assert.deepStrictEqual(componentTargets, [
@@ -783,7 +807,7 @@ obj/src/fonts/pkg_fonts.cm.d
 
     const [
       manifestSourcePath, componentName, componentTargetPath
-    ] = fuchsiaware.Provider.extractManifestPathAndCmlComponent(line) ?? [];
+    ] = Provider.extractManifestPathAndCmlComponent(line) ?? [];
     assert.strictEqual(manifestSourcePath, 'src/fonts/meta/fonts.cml');
     assert.strictEqual(componentName, 'pkg_fonts');
     assert.strictEqual(componentTargetPath, 'src/fonts:pkg_fonts');
@@ -811,7 +835,7 @@ obj/src/ui/scenic/scenic_pkg.manifest
 
     const [
       manifestSourcePath, componentName, componentTargetPath
-    ] = fuchsiaware.Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
+    ] = Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
     assert.strictEqual(manifestSourcePath, 'src/ui/scenic/bin/meta/scenic.cmx');
     assert.strictEqual(componentName, 'scenic');
     assert.strictEqual(componentTargetPath, 'src/ui/scenic:scenic.cmx');
@@ -838,7 +862,7 @@ obj/src/sys/test_runners/elf/elf-test-runner-component.d
 
     const [
       manifestSourcePath, componentName, componentTargetPath
-    ] = fuchsiaware.Provider.extractManifestPathAndCmlComponent(line) ?? [];
+    ] = Provider.extractManifestPathAndCmlComponent(line) ?? [];
     assert.strictEqual(manifestSourcePath, 'src/sys/test_runners/elf/meta/elf_test_runner.cml');
     assert.strictEqual(componentName, 'elf-test-runner');
     assert.strictEqual(componentTargetPath, 'src/sys/test_runners/elf:elf-test-runner-component');
@@ -866,10 +890,16 @@ gen/src/sys/component_manager/component-manager-boot-env-tests-cmp_cmc_validate_
 
     const [
       manifestSourcePath, componentName, componentTargetPath
-    ] = fuchsiaware.Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
-    assert.strictEqual(manifestSourcePath, 'src/sys/component_manager/meta/component_manager_boot_env_tests.cmx');
+    ] = Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
+    assert.strictEqual(
+      manifestSourcePath,
+      'src/sys/component_manager/meta/component_manager_boot_env_tests.cmx'
+    );
     assert.strictEqual(componentName, 'component_manager_boot_env_tests');
-    assert.strictEqual(componentTargetPath, 'src/sys/component_manager:component-manager-boot-env-tests-cmp');
+    assert.strictEqual(
+      componentTargetPath,
+      'src/sys/component_manager:component-manager-boot-env-tests-cmp'
+    );
   });
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -899,7 +929,7 @@ obj/src/sys/test_manager/test_manager_pkg/package_manifest.json
 
     const [
       packageName, packageTargetPath
-    ] = fuchsiaware.Provider.extractPackage(line) ?? [];
+    ] = Provider.extractPackage(line) ?? [];
     assert.strictEqual(packageName, 'test_manager');
     assert.strictEqual(packageTargetPath, 'src/sys/test_manager:test_manager_pkg');
   });
