@@ -20,7 +20,9 @@ import * as fuchsiaware from '../../extension';
 suite('Extension Test Suite', () => {
   vscode.window.showInformationMessage('Start all tests.');
 
-  const provider = new fuchsiaware.Provider();
+  const baseUri = vscode.Uri.file('fuchsia');
+  const buildDir = 'out/default.test';
+  const provider = new fuchsiaware.Provider(baseUri, buildDir);
 
   // TODO(richkadel): Replace these hardcoded copies of specific lines from the `toolchain.ninja`
   // file with a cached but quickly refreshed copy of the developer's most current `toolchain.ninja`
@@ -33,7 +35,217 @@ suite('Extension Test Suite', () => {
   // provideDocumentLinks(), and validates the files exist. Generate stats for the number of
   // valid and invalid links.
 
-  test('session_manager_extractBuildDirPackageNameAndComponents', () => {
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  test('libdriver_integration_test_extractManifestPathAndComponentFromCmcValidate', () => {
+    const line = `
+command
+=
+/usr/bin/env
+../../build/gn_run_binary.sh
+../../prebuilt/third_party/clang/linux-x64/bin
+host_x64/cmc
+--stamp
+gen/src/devices/tests/libdriver-integration-test/libdriver-integration-test_component_cmc_validate_references.action.stamp
+validate-references
+--component-manifest
+obj/src/devices/tests/libdriver-integration-test/libdriver-integration-test_component_generated_manifest.cmx
+--package-manifest
+gen/src/devices/tests/libdriver-integration-test/libdriver-integration-test_component_cmc_validate_references_fini_file
+--gn-label
+//src/devices/tests/libdriver-integration-test$:libdriver-integration-test_component_cmc_validate_references\(//build/toolchain/fuchsia$:arm64\)
+    `;
+
+    const [
+      manifestSourcePath, componentName, componentTargetPath
+    ] = fuchsiaware.Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
+    assert.strictEqual(manifestSourcePath, `../../${buildDir}/src/devices/tests/libdriver-integration-test/libdriver-integration-test_component_generated_manifest.cmx`);
+    assert.strictEqual(componentName, 'libdriver-integration-test_component_generated_manifest');
+    assert.strictEqual(componentTargetPath, 'src/devices/tests/libdriver-integration-test:libdriver-integration-test_component');
+  });
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  test('libdriver_integration_test_extractBuildDirPackageTargetAndComponents', () => {
+    const line = `
+build
+obj/src/devices/tests/libdriver-integration-test/libdriver-integration-test/meta.far
+obj/src/devices/tests/libdriver-integration-test/libdriver-integration-test/meta/contents
+obj/src/devices/tests/libdriver-integration-test/libdriver-integration-test/meta.far.merkle
+obj/src/devices/tests/libdriver-integration-test/libdriver-integration-test/blobs.json
+obj/src/devices/tests/libdriver-integration-test/libdriver-integration-test/blobs.manifest
+obj/src/devices/tests/libdriver-integration-test/libdriver-integration-test/package_manifest.json:
+__src_devices_tests_libdriver-integration-test_libdriver-integration-test___build_toolchain_fuchsia_arm64__rule
+|
+../../build/gn_run_binary.sh
+obj/src/devices/tests/libdriver-integration-test/libdriver-integration-test_manifest
+host_x64/pm
+obj/src/devices/tests/libdriver-integration-test/libdriver-integration-test_component.stamp
+obj/src/devices/tests/libdriver-integration-test/libdriver-integration-test_manifest.stamp
+obj/src/devices/tests/libdriver-integration-test/libdriver-integration-test_metadata.stamp
+obj/src/devices/tests/libdriver-integration-test/libdriver-integration-test_test_libdriver-integration-test_component.stamp
+host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
+    `;
+
+    const [
+      targetBuildDir,
+      packageTarget,
+      componentTargets,
+    ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
+    assert.strictEqual(targetBuildDir, 'src/devices/tests/libdriver-integration-test');
+    assert.strictEqual(packageTarget, 'libdriver-integration-test');
+    assert.deepStrictEqual(componentTargets, [
+      'libdriver-integration-test_component',
+      'test_libdriver-integration-test_component',
+    ]);
+  });
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  test('archivist_integration_tests_extractBuildDirPackageTargetAndComponents', () => {
+    const line = `
+build
+obj/src/devices/bin/driver_manager/driver-manager-tests/meta.far
+obj/src/devices/bin/driver_manager/driver-manager-tests/meta/contents
+obj/src/devices/bin/driver_manager/driver-manager-tests/meta.far.merkle
+obj/src/devices/bin/driver_manager/driver-manager-tests/blobs.json
+obj/src/devices/bin/driver_manager/driver-manager-tests/blobs.manifest
+obj/src/devices/bin/driver_manager/driver-manager-tests/package_manifest.json:
+__src_devices_bin_driver_manager_driver-manager-tests___build_toolchain_fuchsia_arm64__rule
+|
+../../build/gn_run_binary.sh
+obj/src/devices/bin/driver_manager/driver-manager-tests_manifest
+host_x64/pm
+obj/src/devices/bin/driver_manager/driver-host-loader-service-test.stamp
+obj/src/devices/bin/driver_manager/driver-manager-test.stamp
+obj/src/devices/bin/driver_manager/driver-manager-tests_manifest.stamp
+obj/src/devices/bin/driver_manager/driver-manager-tests_metadata.stamp
+obj/src/devices/bin/driver_manager/driver-manager-tests_test_driver-host-loader-service-test.stamp
+obj/src/devices/bin/driver_manager/driver-manager-tests_test_driver-manager-test.stamp
+obj/src/devices/bin/driver_manager/driver-manager-tests_test_driver-runner-test.stamp
+obj/src/devices/bin/driver_manager/driver-runner-test.stamp
+host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
+    `;
+
+    const [
+      targetBuildDir,
+      packageTarget,
+      componentTargets,
+    ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
+    assert.strictEqual(targetBuildDir, 'src/devices/bin/driver_manager');
+    assert.strictEqual(packageTarget, 'driver-manager-tests');
+    assert.deepStrictEqual(componentTargets, [
+      'driver-host-loader-service-test',
+      'driver-manager-test',
+      'test_driver-host-loader-service-test',
+      'test_driver-manager-test',
+      'test_driver-runner-test',
+      'driver-runner-test',
+    ]);
+  });
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  test('archivist_integration_tests_extractBuildDirPackageTargetAndComponents', () => {
+    const line = `
+build
+obj/src/diagnostics/archivist/tests/archive_path/archive_path.cmx:
+__src_diagnostics_archivist_tests_archive_path_archive_path___build_toolchain_fuchsia_arm64__rule
+|
+../../build/gn_run_binary.sh
+obj/src/diagnostics/archivist/tests/archive_path/archive_path_merge
+host_x64/cmc
+obj/src/diagnostics/archivist/tests/archive_path/archive_path_check_includes.stamp
+obj/src/diagnostics/archivist/tests/archive_path/archive_path_cmc_validate_references.stamp
+obj/src/diagnostics/archivist/tests/archive_path/archive_path_include.cmx.stamp
+obj/src/diagnostics/archivist/tests/archive_path/archive_path_manifest_resource.stamp
+obj/src/diagnostics/archivist/tests/archive_path/archive_path_merge.stamp
+obj/src/diagnostics/archivist/tests/archive_path/archive_path_test_archivist.stamp
+obj/src/diagnostics/archivist/tests/archive_path/archive_path_validate.stamp
+./archive_path_test
+host_x64/cmc
+`;
+
+    const [
+      manifestSourcePath,
+      targetBuildDir,
+      componentTarget,
+      subComponentTargets,
+    ] = fuchsiaware.Provider.extractSubComponents(line) ?? [, , []];
+    assert.strictEqual(manifestSourcePath, 'src/diagnostics/archivist/tests/archive_path/archive_path.cmx');
+    assert.strictEqual(targetBuildDir, 'src/diagnostics/archivist/tests/archive_path');
+    assert.strictEqual(componentTarget, 'archive_path');
+    assert.deepStrictEqual(subComponentTargets, [
+      'archive_path_test_archivist',
+    ]);
+  });
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  test('archivist_integration_tests_archive_path_test_extractManifestPathAndComponentFromCmcValidate', () => {
+    const line = `
+command
+=
+/usr/bin/env
+../../build/gn_run_binary.sh
+../../prebuilt/third_party/clang/linux-x64/bin
+host_x64/cmc
+--stamp
+gen/src/diagnostics/archivist/tests/archive_path/archive_path_test_archivist_cmc_validate_references.action.stamp
+validate-references
+--component-manifest
+../../src/diagnostics/archivist/tests/archive_path/meta/archive_path_test_archivist.cmx
+--package-manifest
+gen/src/diagnostics/archivist/tests/archive_path/archive_path_test_archivist_cmc_validate_references_fini_file
+--gn-label
+//src/diagnostics/archivist/tests/archive_path$:archive_path_test_archivist_cmc_validate_references\(//build/toolchain/fuchsia$:arm64\)
+    `;
+
+    const [
+      manifestSourcePath, componentName, componentTargetPath
+    ] = fuchsiaware.Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
+    assert.strictEqual(manifestSourcePath, 'src/diagnostics/archivist/tests/archive_path/meta/archive_path_test_archivist.cmx');
+    assert.strictEqual(componentName, 'archive_path_test_archivist');
+    assert.strictEqual(componentTargetPath, 'src/diagnostics/archivist/tests/archive_path:archive_path_test_archivist');
+  });
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  test('archivist_integration_tests_extractBuildDirPackageTargetAndComponents', () => {
+    const line = `
+build
+obj/src/diagnostics/archivist/tests/archivist-integration-tests/meta.far
+obj/src/diagnostics/archivist/tests/archivist-integration-tests/meta/contents
+obj/src/diagnostics/archivist/tests/archivist-integration-tests/meta.far.merkle
+obj/src/diagnostics/archivist/tests/archivist-integration-tests/blobs.json
+obj/src/diagnostics/archivist/tests/archivist-integration-tests/blobs.manifest
+obj/src/diagnostics/archivist/tests/archivist-integration-tests/package_manifest.json:
+__src_diagnostics_archivist_tests_archivist-integration-tests___build_toolchain_fuchsia_arm64__rule
+|
+../../build/gn_run_binary.sh
+obj/src/diagnostics/archivist/tests/archivist-integration-tests_manifest
+host_x64/pm
+obj/src/diagnostics/archivist/tests/archivist-integration-tests_manifest.stamp
+obj/src/diagnostics/archivist/tests/archivist-integration-tests_metadata.stamp
+obj/src/diagnostics/archivist/tests/accessor_truncation/accessor-truncation-integration-test.stamp
+obj/src/diagnostics/archivist/tests/archive_path/archive_path.stamp
+obj/src/diagnostics/archivist/tests/feedback_reader/feedback_reader.stamp
+obj/src/diagnostics/archivist/tests/logs/cpp/cpp.stamp
+obj/src/diagnostics/archivist/tests/unified_reader/unified_reader.stamp
+host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
+    `;
+
+    const [
+      targetBuildDir,
+      packageTarget,
+      componentTargets,
+    ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
+    assert.strictEqual(targetBuildDir, 'src/diagnostics/archivist/tests');
+    assert.strictEqual(packageTarget, 'archivist-integration-tests');
+    assert.deepStrictEqual(componentTargets, [
+      'accessor_truncation/accessor-truncation-integration-test',
+      'archive_path/archive_path',
+      'feedback_reader/feedback_reader',
+      'unified_reader/unified_reader',
+    ]);
+  });
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  test('session_manager_extractBuildDirPackageTargetAndComponents', () => {
     const line = `
 build
 obj/src/session/bin/session_manager/session_manager/meta.far
@@ -54,17 +266,17 @@ host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
     `;
 
     const [
-      targetBuildDir, packageTarget, componentTargets
+      targetBuildDir, packageTarget, componentTargets,
     ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
     assert.strictEqual(targetBuildDir, 'src/session/bin/session_manager');
     assert.strictEqual(packageTarget, 'session_manager');
-
     assert.deepStrictEqual(componentTargets, [
       'session_manager_component',
     ]);
   });
 
-  test('ime_keyboard_test_extractBuildDirPackageNameAndComponents', () => {
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  test('ime_keyboard_test_extractBuildDirPackageTargetAndComponents', () => {
     const line = `
 build
 obj/src/ui/bin/ime/keyboard_test/meta.far
@@ -109,21 +321,24 @@ obj/src/ui/bin/ime/keyboard_test_validate_manifests_keyboard_test_bin.cmx.stamp
     `;
 
     const [
-      targetBuildDir, packageTarget, componentTargets
+      targetBuildDir, packageTarget, componentTargets,
     ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
     assert.strictEqual(targetBuildDir, 'src/ui/bin/ime');
     assert.strictEqual(packageTarget, 'keyboard_test');
-
     assert.deepStrictEqual(componentTargets, [
       'default_hardware_ime.cmx',
       'ime_service.cmx',
       'ime_service_integration_test.cmx',
       'keyboard3_integration_test.cmx',
       'keyboard_test_bin.cmx',
+      'keyboard_test_test/ime_service_integration_test_test_spec',
+      'keyboard_test_test/keyboard3_integration_test_test_spec',
+      'keyboard_test_test/keyboard_test_bin_test_spec',
     ]);
   });
 
-  test('inspect_codelab_extractManifestPathAndCmxComponent', () => {
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  test('inspect_codelab_extractManifestPathAndComponentFromCmcValidate', () => {
     const line = `
 command
 =
@@ -144,7 +359,7 @@ gen/examples/diagnostics/inspect/codelab/cpp/part_1/tests/inspect_cpp_codelab_pa
 
     const [
       manifestSourcePath, componentName, componentTargetPath
-    ] = fuchsiaware.Provider.extractManifestPathAndCmxComponent(line) ?? [];
+    ] = fuchsiaware.Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
     assert.strictEqual(
       manifestSourcePath,
       'examples/diagnostics/inspect/codelab/cpp/part_1/tests/integration_part_1.cmx'
@@ -156,7 +371,178 @@ gen/examples/diagnostics/inspect/codelab/cpp/part_1/tests/inspect_cpp_codelab_pa
     );
   });
 
-  test('fonts_extractManifestPathAndCmxComponent', () => {
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  test('archivist_integration_tests_v2_extractPackage', () => {
+    const line = `
+command
+=
+/usr/bin/env
+../../build/gn_run_binary.sh
+../../prebuilt/third_party/clang/linux-x64/bin
+host_x64/pm
+-o
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2
+-m
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2.manifest
+-n
+archivist-integration-tests-v2
+-version
+0
+build
+-output-package-manifest
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2/package_manifest.json
+-depfile
+-blobsfile
+-blobs-manifest
+    `;
+
+    const [
+      packageName, packageTargetPath
+    ] = fuchsiaware.Provider.extractPackage(line) ?? [];
+    assert.strictEqual(packageName, 'archivist-integration-tests-v2');
+    assert.strictEqual(
+      packageTargetPath,
+      'src/diagnostics/archivist/tests/v2:archivist-integration-tests-v2'
+    );
+  });
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  test('archivist_integration_tests_v2_archivist_extractManifestPathAndComponentFromCmcValidate', () => {
+    const line = `
+command
+=
+/usr/bin/env
+../../build/gn_run_binary.sh
+../../prebuilt/third_party/clang/linux-x64/bin
+host_x64/cmc
+--stamp
+gen/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2_validate_manifests_archivist.cm.action.stamp
+validate-references
+--component-manifest
+../../src/diagnostics/archivist/tests/v2/meta/archivist_for_integration.cml
+--package-manifest
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2.manifest
+--gn-label
+//src/diagnostics/archivist/tests/v2$:archivist-integration-tests-v2\(//build/toolchain/fuchsia$:arm64\)
+    `;
+
+    const [
+      manifestSourcePath, componentName, componentTargetPath
+    ] = fuchsiaware.Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
+    assert.strictEqual(manifestSourcePath, 'src/diagnostics/archivist/tests/v2/meta/archivist_for_integration.cml');
+    assert.strictEqual(componentName, 'archivist');
+    assert.strictEqual(componentTargetPath, 'src/diagnostics/archivist/tests/v2:archivist.cm');
+  });
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  test('archivist_integration_tests_v2_driver_extractManifestPathAndComponentFromCmcValidate', () => {
+    const line = `
+command
+=
+/usr/bin/env
+../../build/gn_run_binary.sh
+../../prebuilt/third_party/clang/linux-x64/bin
+host_x64/cmc
+--stamp
+gen/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2_validate_manifests_driver.cm.action.stamp
+validate-references
+--component-manifest
+../../src/diagnostics/archivist/tests/v2/meta/driver.cml
+--package-manifest
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2.manifest
+--gn-label
+//src/diagnostics/archivist/tests/v2$:archivist-integration-tests-v2\(//build/toolchain/fuchsia$:arm64\)
+    `;
+
+    const [
+      manifestSourcePath, componentName, componentTargetPath
+    ] = fuchsiaware.Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
+    assert.strictEqual(manifestSourcePath, 'src/diagnostics/archivist/tests/v2/meta/driver.cml');
+    assert.strictEqual(componentName, 'driver');
+    assert.strictEqual(componentTargetPath, 'src/diagnostics/archivist/tests/v2:driver.cm');
+  });
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  test('archivist_integration_tests_v2_extractManifestPathAndCmlComponent', () => {
+    const line = `
+command
+=
+/usr/bin/env
+../../build/gn_run_binary.sh
+../../prebuilt/third_party/clang/linux-x64/bin
+host_x64/cmc
+compile
+../../src/diagnostics/archivist/tests/v2/meta/archivist_integration_tests.cml
+--output
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2_archivist_integration_tests.cm
+--includepath
+../../
+--depfile
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2_archivist_integration_tests.cm.d
+    `;
+
+    const [
+      manifestSourcePath, componentName, componentTargetPath
+    ] = fuchsiaware.Provider.extractManifestPathAndCmlComponent(line) ?? [];
+    assert.strictEqual(manifestSourcePath, 'src/diagnostics/archivist/tests/v2/meta/archivist_integration_tests.cml');
+    assert.strictEqual(componentName, 'archivist-integration-tests-v2_archivist_integration_tests');
+    // THIS SEEMS WRONG:
+    assert.strictEqual(
+      componentTargetPath,
+      'src/diagnostics/archivist/tests/v2:archivist-integration-tests-v2_archivist_integration_tests'
+    );
+  });
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  test('archivist_integration_tests_v2_extractBuildDirPackageTargetAndComponents', () => {
+    const line = `
+build
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2/meta.far
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2/meta/contents
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2/meta.far.merkle
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2/blobs.json
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2/blobs.manifest
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2/package_manifest.json:
+__src_diagnostics_archivist_tests_v2_archivist-integration-tests-v2___build_toolchain_fuchsia_arm64__rule
+|
+../../build/gn_run_binary.sh
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2.manifest
+host_x64/pm
+obj/build/deprecated_package.stamp
+./archivist
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2.manifest.stamp
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2.resource.resource.config_archivist_config.json.stamp
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2_archivist.cm.stamp
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2_archivist_integration_tests.cm.stamp
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2_driver.cm.stamp
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2_metadata.stamp
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2_stub_inspect_component.cm.stamp
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2_test/archivist_integration_tests_test_spec.stamp
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2_validate_manifests_archivist.cm.stamp
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2_validate_manifests_archivist_integration_tests.cm.stamp
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2_validate_manifests_driver.cm.stamp
+obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2_validate_manifests_stub_inspect_component.cm.stamp
+./archivist_integration_tests
+./stub_inspect_component
+host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
+    `;
+
+    const [
+      targetBuildDir, packageTarget, componentTargets,
+    ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
+    assert.strictEqual(targetBuildDir, 'src/diagnostics/archivist/tests/v2');
+    assert.strictEqual(packageTarget, 'archivist-integration-tests-v2');
+    assert.deepStrictEqual(componentTargets, [
+      'archivist.cm',
+      'archivist_integration_tests.cm',
+      'driver.cm',
+      'stub_inspect_component.cm',
+      'archivist-integration-tests-v2_test/archivist_integration_tests_test_spec',
+    ]);
+  });
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  test('fonts_extractManifestPathAndComponentFromCmcValidate', () => {
     const line = `
 command
 =
@@ -177,13 +563,14 @@ obj/src/fonts/pkg.manifest
 
     const [
       manifestSourcePath, componentName, componentTargetPath
-    ] = fuchsiaware.Provider.extractManifestPathAndCmxComponent(line) ?? [];
+    ] = fuchsiaware.Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
     assert.strictEqual(manifestSourcePath, 'src/fonts/meta/fonts.cmx');
     assert.strictEqual(componentName, 'fonts');
     assert.strictEqual(componentTargetPath, 'src/fonts:fonts.cmx');
   });
 
-  test('go_test_runner_extractBuildDirPackageNameAndComponents', () => {
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  test('go_test_runner_extractBuildDirPackageTargetAndComponents', () => {
     const line = `
 build
 obj/src/sys/test_runners/gotests/go-test-runner/meta.far
@@ -204,15 +591,15 @@ obj/src/sys/test_runners/gotests/go_test_runner.stamp
     `;
 
     const [
-      targetBuildDir, packageTarget, componentTargets
+      targetBuildDir, packageTarget, componentTargets,
     ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
     assert.strictEqual(targetBuildDir, 'src/sys/test_runners/gotests');
     assert.strictEqual(packageTarget, 'go-test-runner');
-
     assert.deepStrictEqual(componentTargets, ['go_test_runner']);
   });
 
-  test('elf_extractBuildDirPackageNameAndComponents', () => {
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  test('elf_extractBuildDirPackageTargetAndComponents', () => {
     const line = `
 build
 obj/src/sys/test_runners/elf/elf-test-runner/meta.far
@@ -233,15 +620,15 @@ obj/src/sys/test_runners/elf/elf-test-runner_metadata.stamp
     `;
 
     const [
-      targetBuildDir, packageTarget, componentTargets
+      targetBuildDir, packageTarget, componentTargets,
     ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
     assert.strictEqual(targetBuildDir, 'src/sys/test_runners/elf');
     assert.strictEqual(packageTarget, 'elf-test-runner');
-
     assert.deepStrictEqual(componentTargets, ['elf-test-runner-component']);
   });
 
-  test('extractBuildDirPackageNameAndComponents', () => {
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  test('extractBuildDirPackageTargetAndComponents', () => {
     const line = `
 build
 obj/src/sys/component_manager/component-manager-tests/meta.far
@@ -270,11 +657,10 @@ host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
     `;
 
     const [
-      targetBuildDir, packageTarget, componentTargets
+      targetBuildDir, packageTarget, componentTargets,
     ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
     assert.strictEqual(targetBuildDir, 'src/sys/component_manager');
     assert.strictEqual(packageTarget, 'component-manager-tests');
-
     assert.deepStrictEqual(componentTargets, [
       'component-manager-boot-env-tests-cmp',
       'component-manager-tests-cmp',
@@ -284,7 +670,8 @@ host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
     ]);
   });
 
-  test('scenic_extractBuildDirPackageNameAndComponents', () => {
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  test('scenic_extractBuildDirPackageTargetAndComponents', () => {
     const line = `
 build
 obj/src/ui/scenic/scenic_pkg/meta.far
@@ -324,17 +711,17 @@ obj/src/ui/scenic/scenic_pkg_validate_manifests_scenic.cmx.stamp
     `;
 
     const [
-      targetBuildDir, packageTarget, componentTargets
+      targetBuildDir, packageTarget, componentTargets,
     ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , ['']];
     assert.strictEqual(targetBuildDir, 'src/ui/scenic');
     assert.strictEqual(packageTarget, 'scenic_pkg');
-
     assert.deepStrictEqual(componentTargets, [
       'scenic.cmx',
     ]);
   });
 
-  test('fonts_extractBuildDirPackageNameAndComponents', () => {
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  test('fonts_extractBuildDirPackageTargetAndComponents', () => {
     const line = `
 build
 obj/src/fonts/pkg/meta.far
@@ -364,11 +751,10 @@ host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
     `;
 
     const [
-      targetBuildDir, packageTarget, componentTargets
+      targetBuildDir, packageTarget, componentTargets,
     ] = fuchsiaware.Provider.extractBuildDirPackageTargetAndComponents(line) ?? [, , []];
     assert.strictEqual(targetBuildDir, 'src/fonts');
     assert.strictEqual(packageTarget, 'pkg');
-
     assert.deepStrictEqual(componentTargets, [
       'fonts.cm',
       'fonts.cmx',
@@ -376,6 +762,7 @@ host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
     ]);
   });
 
+  //////////////////////////////////////////////////////////////////////////////////////////////////
   test('fonts_extractManifestPathAndCmlComponent', () => {
     const line = `
 command
@@ -402,7 +789,8 @@ obj/src/fonts/pkg_fonts.cm.d
     assert.strictEqual(componentTargetPath, 'src/fonts:pkg_fonts');
   });
 
-  test('scenic_extractManifestPathAndCmxComponent', () => {
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  test('scenic_extractManifestPathAndComponentFromCmcValidate', () => {
     const line = `
 command
 =
@@ -423,12 +811,13 @@ obj/src/ui/scenic/scenic_pkg.manifest
 
     const [
       manifestSourcePath, componentName, componentTargetPath
-    ] = fuchsiaware.Provider.extractManifestPathAndCmxComponent(line) ?? [];
+    ] = fuchsiaware.Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
     assert.strictEqual(manifestSourcePath, 'src/ui/scenic/bin/meta/scenic.cmx');
     assert.strictEqual(componentName, 'scenic');
     assert.strictEqual(componentTargetPath, 'src/ui/scenic:scenic.cmx');
   });
 
+  //////////////////////////////////////////////////////////////////////////////////////////////////
   test('elf_extractManifestPathAndCmlComponent', () => {
     const line = `
 command
@@ -455,7 +844,8 @@ obj/src/sys/test_runners/elf/elf-test-runner-component.d
     assert.strictEqual(componentTargetPath, 'src/sys/test_runners/elf:elf-test-runner-component');
   });
 
-  test('extractManifestPathAndCmxComponent', () => {
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  test('extractManifestPathAndComponentFromCmcValidate', () => {
     const line = `
 command
 =
@@ -476,13 +866,14 @@ gen/src/sys/component_manager/component-manager-boot-env-tests-cmp_cmc_validate_
 
     const [
       manifestSourcePath, componentName, componentTargetPath
-    ] = fuchsiaware.Provider.extractManifestPathAndCmxComponent(line) ?? [];
+    ] = fuchsiaware.Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
     assert.strictEqual(manifestSourcePath, 'src/sys/component_manager/meta/component_manager_boot_env_tests.cmx');
     assert.strictEqual(componentName, 'component_manager_boot_env_tests');
     assert.strictEqual(componentTargetPath, 'src/sys/component_manager:component-manager-boot-env-tests-cmp');
   });
 
-  test('extractPath', () => {
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  test('extractPackage', () => {
     const line = `
 command
 =
@@ -513,6 +904,7 @@ obj/src/sys/test_manager/test_manager_pkg/package_manifest.json
     assert.strictEqual(packageTargetPath, 'src/sys/test_manager:test_manager_pkg');
   });
 
+  //////////////////////////////////////////////////////////////////////////////////////////////////
   test('matches .cm files (compiled cml)', async () => {
     const docWithComponentUrl = await vscode.workspace.openTextDocument({
       content: `
@@ -526,6 +918,7 @@ componentUrl: "fuchsia-pkg://fuchsia.com/some-package?1a2b3c4d5e6f#meta/some-com
     assert.strictEqual(1, links?.length);
   });
 
+  //////////////////////////////////////////////////////////////////////////////////////////////////
   test('matches .cmx files', async () => {
     const docWithComponentUrl = await vscode.workspace.openTextDocument({
       content: `
@@ -539,6 +932,7 @@ componentUrl: "fuchsia-pkg://fuchsia.com/some-package?1a2b3c4d5e6f#meta/some-com
     assert.strictEqual(1, links?.length);
   });
 
+  //////////////////////////////////////////////////////////////////////////////////////////////////
   test('finds references to a manifest', async () => {
     const referencedManifestDoc = await vscode.languages.setTextDocumentLanguage(
       await vscode.workspace.openTextDocument({
@@ -552,28 +946,35 @@ componentUrl: "fuchsia-pkg://fuchsia.com/some-package?1a2b3c4d5e6f#meta/some-com
       'untitled-fuchsia-manifest',
     );
 
+    const packageName = 'some-package';
+    const componentName = 'some-component';
+    const componentUrl = `fuchsia-pkg://fuchsia.com/${packageName}#meta/${componentName}.cm`;
+
     const docWithComponentUrl = await vscode.workspace.openTextDocument({
       content: `
-componentUrl: "fuchsia-pkg://fuchsia.com/some-package?1a2b3c4d5e6f#meta/some-component.cmx"
+componentUrl: "fuchsia-pkg://fuchsia.com/${packageName}?1a2b3c4d5e6f#meta/${componentName}.cmx"
 `
     });
-    provider.addLink(
-      'some-package', 'some-component', referencedManifestDoc.uri);
+    provider.addLink(packageName, componentName, referencedManifestDoc.uri);
 
     provider.addReference(
-      'some-package',
-      'some-component',
+      packageName,
+      componentName,
+      componentUrl,
       vscode.Uri.file('src/some/path_to_some_referrer.txt'),
       10,
       5,
     );
+
     provider.addReference(
-      'some-package',
-      'some-component',
+      packageName,
+      componentName,
+      componentUrl,
       vscode.Uri.file('src/some/path_to_another_referrer.txt'),
       10,
       5,
     );
+
     const references = provider.provideReferences(
       referencedManifestDoc,
       new vscode.Position(0, 0),

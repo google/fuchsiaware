@@ -51,24 +51,132 @@ function error(message: string) {
 
 // this method is called when vs code is activated
 export function activate(context: vscode.ExtensionContext) {
+  _asyncActivate(context).then((success) => info(
+    `The FuchsiAware extension initialization completed ${success ? 'successfully' : 'with errors'}`
+  ));
+}
+
+async function _asyncActivate(context: vscode.ExtensionContext): Promise<boolean> {
   info('The FuchsiAware extension is activated and looking for the fuchsia source...');
-  const provider = new Provider();
-  provider.init().then((success) => {
-    if (success) {
-      context.subscriptions.push(vscode.Disposable.from(
-        vscode.languages.registerDocumentLinkProvider({ scheme: Provider.scheme }, provider),
-      ));
-      info('The DocumentLinkProvider is initialized and registered.');
-      context.subscriptions.push(vscode.Disposable.from(
-        vscode.window.registerTerminalLinkProvider(provider),
-      ));
-      info('The TerminalLinkProvider is initialized and registered.');
-      context.subscriptions.push(vscode.Disposable.from(
-        vscode.languages.registerReferenceProvider({ scheme: Provider.scheme }, provider),
-      ));
-      info('The ReferenceProvider is initialized and registered.');
+
+  const result = await _findFuchsiaBuildDir();
+  if (!result) {
+    return false;
+  }
+  const [baseUri, buildDir] = result;
+
+  const provider = new Provider(baseUri, buildDir);
+
+  if (!await provider.init()) {
+    return false;
+  }
+
+  context.subscriptions.push(vscode.Disposable.from(
+    vscode.languages.registerDocumentLinkProvider({ scheme: Provider.scheme }, provider),
+  ));
+  info('The DocumentLinkProvider is initialized and registered.');
+  context.subscriptions.push(vscode.Disposable.from(
+    vscode.window.registerTerminalLinkProvider(provider),
+  ));
+  info('The TerminalLinkProvider is initialized and registered.');
+  context.subscriptions.push(vscode.Disposable.from(
+    vscode.languages.registerReferenceProvider({ scheme: Provider.scheme }, provider),
+  ));
+  info('The ReferenceProvider is initialized and registered.');
+  return true;
+}
+
+async function _findFuchsiaBuildDir(): Promise<[vscode.Uri, string] | undefined> {
+  const buildDirFilename = '.fx-build-dir';
+  if (!vscode.workspace.workspaceFolders) {
+    return;
+  }
+  let useFuchsiaDirFromEnv = false;
+  let fuchsiaDirFromEnv: string | undefined =
+    vscode.workspace.getConfiguration().get(FUCHSIA_DIR_SETTING_KEY);
+  let fuchsiaDirVariable;
+  if (fuchsiaDirFromEnv) {
+    fuchsiaDirVariable = `VS Code setting '${FUCHSIA_DIR_SETTING_KEY}'`;
+    useFuchsiaDirFromEnv = true;
+  } else {
+    fuchsiaDirFromEnv = process.env.FUCHSIA_DIR;
+    if (fuchsiaDirFromEnv) {
+      fuchsiaDirVariable = `environment variable '$FUCHSIA_DIR'`;
+    } else {
+      fuchsiaDirFromEnv = process.env.FUCHSIA_ROOT;
+      if (fuchsiaDirFromEnv) {
+        fuchsiaDirVariable = `environment variable '$FUCHSIA_ROOT'`;
+      }
     }
-  });
+  }
+  let fuchsiaSubdirUri;
+  for (const folder of vscode.workspace.workspaceFolders) {
+    let buildDir;
+    if (!useFuchsiaDirFromEnv || folder.uri.path === fuchsiaDirFromEnv) {
+      buildDir = await _readBuildDirDoc(folder.uri, buildDirFilename);
+    }
+    if (buildDir) {
+      return [folder.uri, buildDir];
+    } else if (!fuchsiaSubdirUri && fuchsiaDirFromEnv &&
+      folder.uri.fsPath.startsWith(fuchsiaDirFromEnv)) {
+      fuchsiaSubdirUri = folder.uri;
+    }
+  }
+  if (!useFuchsiaDirFromEnv) {
+    info(
+      `Could not find file '${buildDirFilename}' in the root of any workspace folder: \n  ` +
+      vscode.workspace.workspaceFolders.map((folder) => folder.uri).join('\n  ')
+    );
+  }
+  if (fuchsiaDirFromEnv) {
+    if (fuchsiaSubdirUri) {
+      const fuchsiaDirUri = fuchsiaSubdirUri.with({ path: fuchsiaDirFromEnv });
+      const buildDir = await _readBuildDirDoc(fuchsiaDirUri, buildDirFilename);
+      if (buildDir) {
+        info(`Loading provider data from ${fuchsiaDirVariable} = '${fuchsiaDirUri}'`);
+        return [fuchsiaDirUri, buildDir];
+      } else {
+        info(
+          `nor was it found in the directory from ${fuchsiaDirVariable} (${fuchsiaDirUri}).`
+        );
+      }
+    } else {
+      info(
+        `nor was any workspace folder found under the directory from ${fuchsiaDirVariable} ` +
+        `(${fuchsiaDirFromEnv}).`
+      );
+    }
+  } else {
+    info(
+      `and the fuchsia root directory could not be determined from either ` +
+      `settings ('${FUCHSIA_DIR_SETTING_KEY}') or an environment variable ($FUCHSIA_DIR or ` +
+      `$FUCHSIA_ROOT.`
+    );
+  }
+  info(
+    `If you have an open workspace for the 'fuchsia.git' source tree, make sure the ` +
+    `workspace is rooted at the repository root directory (e.g., 'fuchsia'), and ` +
+    'run `fx set ...` or `fx use ...`, then reload the VS Code window.'
+  );
+  return;
+}
+
+async function _readBuildDirDoc(
+  folderUri: vscode.Uri,
+  buildDirFilename: string
+): Promise<string | undefined> {
+  const buildDirFileUri = folderUri.with({ path: `${folderUri.path}/${buildDirFilename}` });
+  try {
+    const buildDirDoc = await vscode.workspace.openTextDocument(buildDirFileUri);
+    const buildDir = buildDirDoc.getText().trim();
+    info(
+      `Folder '${folderUri.fsPath}' contains the '${buildDirFilename}' file, ` +
+      `which specifies that the current Fuchsia build directory is '${buildDir}'`
+    );
+    return buildDir;
+  } catch (err) {
+    return;
+  } // the file probably doesn't exist in this folder
 }
 
 interface ComponentUrlTerminalLink extends vscode.TerminalLink {
@@ -82,145 +190,52 @@ export class Provider implements
 
   static scheme = '*';
 
-  private _packageAndComponentToSourceUri = new Map<string, vscode.Uri>();
+  private _baseUri: vscode.Uri;
+  private _buildDir: string;
+  private _packageAndComponentToManifestUri = new Map<string, vscode.Uri>();
   private _sourcePathToPackageAndComponent = new Map<string, string>();
   private _packageAndComponentToReferences = new Map<string, vscode.Location[]>();
 
+  constructor(baseUri: vscode.Uri, buildDir: string) {
+    this._baseUri = baseUri;
+    this._buildDir = buildDir;
+  }
+
   dispose() {
-    this._packageAndComponentToSourceUri.clear();
+    this._packageAndComponentToManifestUri.clear();
     this._sourcePathToPackageAndComponent.clear();
     this._packageAndComponentToReferences.clear();
   }
 
   async init(): Promise<boolean> {
-    const result = await this._findFuchsiaBuildDir();
-    if (!result) {
-      return false;
-    }
-
-    const [baseUri, buildDir] = result;
-
-    const [linksResult, referencesResult] = await Promise.all([
-      this._getLinksToManifests(baseUri, buildDir),
-      this._getReferencesToManifests(baseUri, buildDir)
+    const [gotLinks, gotReferences] = await Promise.all([
+      this._getLinksToManifests(),
+      this._getReferencesToManifests()
     ]);
 
-    if (!linksResult || !referencesResult) {
-      return false;
-    }
+    return gotLinks && gotReferences;
 
-    [
-      this._packageAndComponentToSourceUri,
-      this._sourcePathToPackageAndComponent,
-    ] = linksResult;
+    // if (!linksResult || !referencesResult) {
+    //   return false;
+    // }
 
-    this._packageAndComponentToReferences = referencesResult;
+    // [
+    //   this._packageAndComponentToManifestUri,
+    //   this._sourcePathToPackageAndComponent,
+    // ] = linksResult;
 
-    return true;
+    // this._packageAndComponentToReferences = referencesResult;
+
+    // return true;
   }
 
-  private async _findFuchsiaBuildDir(): Promise<[vscode.Uri, string] | undefined> {
-    const buildDirFilename = '.fx-build-dir';
-    if (!vscode.workspace.workspaceFolders) {
-      return;
-    }
-    let useFuchsiaDirFromEnv = false;
-    let fuchsiaDirFromEnv: string | undefined =
-      vscode.workspace.getConfiguration().get(FUCHSIA_DIR_SETTING_KEY);
-    let fuchsiaDirVariable;
-    if (fuchsiaDirFromEnv) {
-      fuchsiaDirVariable = `VS Code setting '${FUCHSIA_DIR_SETTING_KEY}'`;
-      useFuchsiaDirFromEnv = true;
-    } else {
-      fuchsiaDirFromEnv = process.env.FUCHSIA_DIR;
-      if (fuchsiaDirFromEnv) {
-        fuchsiaDirVariable = `environment variable '$FUCHSIA_DIR'`;
-      } else {
-        fuchsiaDirFromEnv = process.env.FUCHSIA_ROOT;
-        if (fuchsiaDirFromEnv) {
-          fuchsiaDirVariable = `environment variable '$FUCHSIA_ROOT'`;
-        }
-      }
-    }
-    let fuchsiaSubdirUri;
-    for (const folder of vscode.workspace.workspaceFolders) {
-      let buildDir;
-      if (!useFuchsiaDirFromEnv || folder.uri.path === fuchsiaDirFromEnv) {
-        buildDir = await this._readBuildDirDoc(folder.uri, buildDirFilename);
-      }
-      if (buildDir) {
-        return [folder.uri, buildDir];
-      } else if (!fuchsiaSubdirUri && fuchsiaDirFromEnv &&
-        folder.uri.fsPath.startsWith(fuchsiaDirFromEnv)) {
-        fuchsiaSubdirUri = folder.uri;
-      }
-    }
-    if (!useFuchsiaDirFromEnv) {
-      info(
-        `Could not find file '${buildDirFilename}' in the root of any workspace folder: \n  ` +
-        vscode.workspace.workspaceFolders.map((folder) => folder.uri).join('\n  ')
-      );
-    }
-    if (fuchsiaDirFromEnv) {
-      if (fuchsiaSubdirUri) {
-        const fuchsiaDirUri = fuchsiaSubdirUri.with({ path: fuchsiaDirFromEnv });
-        const buildDir = await this._readBuildDirDoc(fuchsiaDirUri, buildDirFilename);
-        if (buildDir) {
-          info(`Loading provider data from ${fuchsiaDirVariable} = '${fuchsiaDirUri}'`);
-          return [fuchsiaDirUri, buildDir];
-        } else {
-          info(
-            `nor was it found in the directory from ${fuchsiaDirVariable} (${fuchsiaDirUri}).`
-          );
-        }
-      } else {
-        info(
-          `nor was any workspace folder found under the directory from ${fuchsiaDirVariable} ` +
-          `(${fuchsiaDirFromEnv}).`
-        );
-      }
-    } else {
-      info(
-        `and the fuchsia root directory could not be determined from either ` +
-        `settings ('${FUCHSIA_DIR_SETTING_KEY}') or an environment variable ($FUCHSIA_DIR or ` +
-        `$FUCHSIA_ROOT.`
-      );
-    }
-    info(
-      `If you have an open workspace for the 'fuchsia.git' source tree, make sure the ` +
-      `workspace is rooted at the repository root directory (e.g., 'fuchsia'), and ` +
-      'run `fx set ...` or `fx use ...`, then reload the VS Code window.'
-    );
-    return;
-  }
-
-  private async _readBuildDirDoc(
-    folderUri: vscode.Uri,
-    buildDirFilename: string
-  ): Promise<string | undefined> {
-    const buildDirFileUri = folderUri.with({ path: `${folderUri.path}/${buildDirFilename}` });
-    try {
-      const buildDirDoc = await vscode.workspace.openTextDocument(buildDirFileUri);
-      const buildDir = buildDirDoc.getText().trim();
-      info(
-        `Folder '${folderUri.fsPath}' contains the '${buildDirFilename}' file, ` +
-        `which specifies that the current Fuchsia build directory is '${buildDir}'`
-      );
-      return buildDir;
-    } catch (err) {
-      return;
-    } // the file probably doesn't exist in this folder
-  }
-
-  private async _getLinksToManifests(
-    baseUri: vscode.Uri,
-    buildDir: string
-  ): Promise<[Map<string, vscode.Uri>, Map<string, string>] | undefined> {
+  private async _getLinksToManifests(): Promise<boolean> {
     const componentTargetPathToPackageTargetPaths = new Map<string, string[]>();
     const componentTargetPathToComponentNameAndManifest = new Map<string, [string, string]>();
+    const componentTargetPathToSubComponentTargets = new Map<string, string[]>();
     const packageTargetPathToPackageName = new Map<string, string>();
 
-    const ninjaFileUri = baseUri.with({ path: `${baseUri.path}/${buildDir}/toolchain.ninja` });
+    const ninjaFileUri = this._baseUri.with({ path: `${this._baseUri.path}/${this._buildDir}/toolchain.ninja` });
     const ninjaStream = fs.createReadStream(ninjaFileUri.fsPath);
     ninjaStream.on('error', (err) => {
       error(
@@ -236,11 +251,24 @@ export class Provider implements
 
     for await (const line of ninjaReadline) {
       let result;
+      if (line.indexOf('libdriver-integration-test/meta.far ') >= 0) {
+        console.log(`found ${line}`);
+        console.log(`stop here`);
+      }
       if ((result = Provider.extractBuildDirPackageTargetAndComponents(line))) {
         const [targetBuildDir, packageTarget, componentTargets] = result;
         for (const componentTarget of componentTargets) {
           const packageTargetPath = `${targetBuildDir}:${packageTarget}`;
-          const componentTargetPath = `${targetBuildDir}:${componentTarget}`;
+          let componentTargetPath;
+          const [
+            subComponentDir,
+            subComponentTarget,
+          ] = componentTarget.split('/');
+          if (subComponentDir && subComponentTarget) {
+            componentTargetPath = `${targetBuildDir}/${subComponentDir}:${subComponentTarget}`;
+          } else {
+            componentTargetPath = `${targetBuildDir}:${componentTarget}`;
+          }
           if (!matchedAtLeastOneMetaFarExample) {
             matchedAtLeastOneMetaFarExample = true;
             debug(
@@ -249,7 +277,6 @@ export class Provider implements
               `least the component built from ninja target '${componentTargetPath}'.`
             );
           }
-
           let packageTargetPaths = componentTargetPathToPackageTargetPaths.get(componentTargetPath);
           if (!packageTargetPaths) {
             packageTargetPaths = [];
@@ -257,14 +284,38 @@ export class Provider implements
           }
           packageTargetPaths.push(packageTargetPath);
         }
-      } else if ((result = Provider.extractManifestPathAndCmxComponent(line)) ||
+      } else if ((result = Provider.extractSubComponents(line))) {
+        const [
+          manifestPath,
+          targetBuildDir,
+          componentTarget,
+          subComponentTargets,
+        ] = result;
+        let componentTargetPath = `${targetBuildDir}:${componentTarget}`;
+        for (const subComponentTarget of subComponentTargets) {
+          if (!matchedAtLeastOneMetaFarExample) {
+            matchedAtLeastOneMetaFarExample = true;
+            debug(
+              `Associating sub-components to components based on build dependencies in ` +
+              `${ninjaFileUri.fsPath}, for example, '${componentTargetPath}' will include at ` +
+              `least the component built from ninja target '${subComponentTarget}'.`
+            );
+          }
+          let subComponentTargets = componentTargetPathToSubComponentTargets.get(componentTargetPath);
+          if (!subComponentTargets) {
+            subComponentTargets = [];
+            componentTargetPathToSubComponentTargets.set(componentTargetPath, subComponentTargets);
+          }
+          subComponentTargets.push(subComponentTarget);
+        }
+      } else if ((result = Provider.extractManifestPathAndComponentFromCmcValidate(line, this._buildDir)) ||
         (result = Provider.extractManifestPathAndCmlComponent(line))) {
-        const [manifestSourcePath, componentName, componentTargetPath] = result;
+        const [manifestPath, componentName, componentTargetPath] = result;
         if (!matchedAtLeastOneManifestAndComponentExample) {
           matchedAtLeastOneManifestAndComponentExample = true;
           debug(
             `Matching components to manifests based on build commands in ${ninjaFileUri.fsPath}, ` +
-            `for example, '${manifestSourcePath}' is the manifest source for ` +
+            `for example, '${manifestPath}' is the manifest source for ` +
             `a component to be named '${componentName}', and built via ninja target ` +
             `'${componentTargetPath}'.`
           );
@@ -273,14 +324,14 @@ export class Provider implements
         if (DEBUG) {
           const existing = componentTargetPathToComponentNameAndManifest.get(componentTargetPath);
           if (existing) {
-            const [origComponentName, origManifestSourcePath] = existing;
+            const [origComponentName, origManifestPath] = existing;
             if (componentName !== origComponentName ||
-              manifestSourcePath !== origManifestSourcePath) {
+              manifestPath !== origManifestPath) {
               console.warn(
                 `(debug-only check): componentTargetPath '${componentTargetPath}' has duplicate ` +
                 `entries:\n` +
-                `${[origComponentName, origManifestSourcePath]} != ` +
-                `${[componentName, manifestSourcePath]}`
+                `${[origComponentName, origManifestPath]} != ` +
+                `${[componentName, manifestPath]}`
               );
             }
           }
@@ -288,7 +339,7 @@ export class Provider implements
 
         componentTargetPathToComponentNameAndManifest.set(
           componentTargetPath,
-          [componentName, manifestSourcePath]
+          [componentName, manifestPath]
         );
       } else if ((result = Provider.extractPackage(line))) {
         const [packageName, packageTargetPath] = result;
@@ -310,50 +361,82 @@ export class Provider implements
         `expected pattern to identify components in a 'build meta.far' statement: \n\n` +
         `  metaFarRegEx = ${Provider._metaFarRegEx}\n`
       );
-      return;
+      return false;
     } else if (!matchedAtLeastOneManifestAndComponentExample) {
       error(
         `The ninja build file '${ninjaFileUri.fsPath}' did not contain any lines matching the ` +
         `expected pattern to identify components in a 'validate .cmx manifest' command: \n\n` +
-        `  validateCmxRegEx = ${Provider._validateCmxRegEx}\n`
+        `  cmcValidateRefsRegEx = ${Provider._cmcValidateRefsRegEx}\n`
       );
-      return;
+      return false;
     } else if (!matchedAtLeastOnePmBuildExample) {
       error(
         `The ninja build file '${ninjaFileUri.fsPath}' did not contain any lines matching the ` +
         `expected pattern to identify components in a 'build package' command: \n\n` +
         `  pmBuildRegEx = ${Provider._pmBuildRegEx}\n`
       );
-      return;
+      return false;
     }
 
-    const packageAndComponentToSourceUri = new Map();
-    const sourcePathToPackageAndComponent = new Map();
     for (
-      const [componentTargetPath, packageTargetPaths]
+      let [componentTargetPath, packageTargetPaths]
       of componentTargetPathToPackageTargetPaths.entries()
     ) {
+      if (componentTargetPath.indexOf('libdriver_integration_test') >= 0 ||
+        componentTargetPath.indexOf('libdriver-integration-test') >= 0) {
+        console.log(`found ${componentTargetPath}`);
+        console.log(`stop here`);
+      }
       for (const packageTargetPath of packageTargetPaths) {
         const packageName = packageTargetPathToPackageName.get(packageTargetPath);
 
         if (!packageName) {
           continue;
         }
-        const values = componentTargetPathToComponentNameAndManifest.get(componentTargetPath);
-        if (!values) {
+        let componentNameAndManifest = componentTargetPathToComponentNameAndManifest.get(componentTargetPath);
+        if (!componentNameAndManifest) {
+          const targetWithoutComponentSuffix = componentTargetPath.replace(/:test_/, ':');
+          if (targetWithoutComponentSuffix !== componentTargetPath) {
+            componentTargetPath = targetWithoutComponentSuffix;
+            componentNameAndManifest = componentTargetPathToComponentNameAndManifest.get(targetWithoutComponentSuffix);
+          }
+        }
+        if (!componentNameAndManifest) {
+          const targetWithoutComponentSuffix = componentTargetPath.replace(/_component$/, '');
+          if (targetWithoutComponentSuffix !== componentTargetPath) {
+            componentTargetPath = targetWithoutComponentSuffix;
+            componentNameAndManifest = componentTargetPathToComponentNameAndManifest.get(targetWithoutComponentSuffix);
+          }
+        }
+        if (!componentNameAndManifest) {
           continue;
         }
-        const [componentName, manifestSourcePath] = values;
-        const packageAndComponent = `${packageName}/${componentName}`;
-        const sourcePath = `${baseUri.path}/${manifestSourcePath}`;
-        const sourceUri = baseUri.with({ path: sourcePath });
-        packageAndComponentToSourceUri.set(packageAndComponent, sourceUri);
-        sourcePathToPackageAndComponent.set(sourcePath, packageAndComponent);
+
+        const [componentName, manifestPath] = componentNameAndManifest;
+        const manifestUri = this._baseUri.with({ path: `${this._baseUri.path}/${manifestPath}` });
+        this.addLink(packageName, componentName, manifestUri);
+
+        const subComponentTargets = componentTargetPathToSubComponentTargets.get(componentTargetPath);
+        if (subComponentTargets) {
+          for (const subComponentTarget of subComponentTargets) {
+            this.addLink(packageName, subComponentTarget, manifestUri);
+          }
+        }
+
+        const nameWithoutComponentSuffix = componentName.replace(/_component(_generated_manifest)?$/, '');
+        if (nameWithoutComponentSuffix !== componentName) {
+          const targetWithoutComponentSuffix = componentTargetPath.replace(/_component(_generated_manifest)?$/, '');
+          // if (targetWithoutComponentSuffix !== componentTargetPath &&
+          // !componentTargetPathToSubComponentTargets.get(targetWithoutComponentSuffix)) {
+          this.addLink(packageName, nameWithoutComponentSuffix, manifestUri);
+          // }
+        }
       }
     }
 
     info('The data required by the DocumentLinkProvider is loaded.');
-    return [packageAndComponentToSourceUri, sourcePathToPackageAndComponent];
+    //    return [packageAndComponentToManifestUri, sourcePathToPackageAndComponent];
+    return true;
   }
 
   // TODO(richkadel): These patterns are very fragile and subject to breakage when GN rules change.
@@ -365,8 +448,8 @@ export class Provider implements
   // narrow set of output targets (only those needed for the extension).
 
   private static _metaFarRegEx = new RegExp([
-    /^\s*build\s*obj\/(?<targetBuildDir>[^.]+?)\/(?<packageTarget>[-\w]+)\/meta.far/,
-    /\s*(?<ignoreOtherOutputs>[^:]+)\s*:/,
+    /^\s*build\s*obj\/(?<targetBuildDir>[^.]+?)\/(?<packageTarget>[-\w]+)\/meta\.far/,
+    /\s*(?<ignoreOtherOutputs>[^:]*)\s*:/,
     /\s*(?<ignoreNinjaRulename>[^\s]+)/,
     /\s*(?<ignoreInputs>[^|]+)\|/,
     /(?<dependencies>(.|\n)*)/,
@@ -398,7 +481,7 @@ export class Provider implements
       // Be careful because many editors and parsers do not provide any warnings if you forget
       // to add the second backslash, but RegExp parsing will mysteriously stop working as
       // expected:
-      `\\sobj/${targetBuildDir}(?!/${packageTarget}\\.)(?:/(?<componentTargetPrefix>${packageTarget})_)?(?:/)?`,
+      `\\s*obj/${targetBuildDir}(?!/${packageTarget}\\.)/(?:(?:(?:(?<componentBuildSubdir>${packageTarget})_)?)|(?<subPackage>[^./]+))(?:/)?`,
       `(?:`,
       `(?:manifest.stamp)|`,
       `(?:metadata.stamp)|`,
@@ -412,13 +495,18 @@ export class Provider implements
       let [
         , // full match
         componentTargetPrefix,
+        componentBuildSubdir,
         componentTarget,
       ] = depMatch;
       if (componentTarget === 'component' && componentTargetPrefix) {
         componentTarget = `${componentTargetPrefix}_${componentTarget}`;
       }
       if (componentTarget) {
-        componentTargets.push(componentTarget);
+        if (componentBuildSubdir) {
+          componentTargets.push(`${componentBuildSubdir}/${componentTarget}`);
+        } else if (componentTarget) {
+          componentTargets.push(componentTarget);
+        }
       }
     }
 
@@ -429,67 +517,141 @@ export class Provider implements
     ];
   }
 
-  private static _validateCmxRegEx = new RegExp([
+  private static _buildCmxRegEx = new RegExp([
+    /^\s*build\s*obj\/(?<manifestPath>(?<targetBuildDir>[^.]+?)\/(?<componentTarget>[-\w]+)\.cm[xl])/,
+    /\s*(?<ignoreOtherOutputs>[^:]*)\s*:/,
+    /\s*(?<ignoreNinjaRulename>[^\s]+)/,
+    /\s*(?<ignoreInputs>[^|]+)\|/,
+    /(?<dependencies>(.|\n)*)/,
+  ].map(r => r.source).join(''));
+
+  static extractSubComponents(
+    line: string
+  ): [string, string, string, string[]] | undefined {
+    const match = Provider._buildCmxRegEx.exec(line);
+    if (!match) {
+      return;
+    }
+    const [
+      , // full match
+      manifestPath,
+      targetBuildDir,
+      componentTarget,
+      , // ignoreOtherOutputs
+      , // ignoreNinjaRulename
+      , // ignoreInputs
+      dependencies,
+    ] = match;
+
+    // Get all dependencies (global search)
+    const subComponentTargets = [];
+    const depRegEx = new RegExp([
+      // CAUTION! Since this RegExp is built dynamically, and has at least one capturing group that
+      // spans a wide swath (multiple lines, as structured here), the typical slash-contained
+      // JavaScript RegExp syntax cannot be used. This means ALL BACKSLASHES MUST BE DOUBLED.
+      // Be careful because many editors and parsers do not provide any warnings if you forget
+      // to add the second backslash, but RegExp parsing will mysteriously stop working as
+      // expected:
+      `\\s*obj/${targetBuildDir}/`,
+      `(?:`,
+      `(?:${componentTarget}_check_includes)|`,
+      `(?:${componentTarget}_cmc_validate_references)|`,
+      `(?:${componentTarget}_manifest_resource)|`,
+      `(?:${componentTarget}_merge)|`,
+      `(?:${componentTarget}_validate)|`,
+      `(?<subComponentTarget>[-\\w]+)`,
+      `)`,
+      `\\.stamp`,
+    ].join(''), 'g');
+    let depMatch;
+    while ((depMatch = depRegEx.exec(dependencies))) {
+      let [
+        , // full match
+        subComponentTarget,
+      ] = depMatch;
+      if (subComponentTarget) {
+        subComponentTargets.push(subComponentTarget);
+      }
+    }
+
+    return [
+      manifestPath,
+      targetBuildDir,
+      componentTarget,
+      subComponentTargets,
+    ];
+  }
+
+  private static _cmcValidateRefsRegEx = new RegExp([
     /^\s*command\s*=(?:.|\n)*?host_\w+\/cmc\s/,
     // Note: The next regex is optional, and `prefComponentTarget` will be undefined, if
     // '_validate_manifests_' is not part of the `--stamp` string.
-    /(?:(?:.|\n)*?--stamp\s+[^\s]*?_validate_manifests_(?<prefComponentTarget>[-\w.]+?)?\.action\.stamp\b)?/,
+    /(?:(?:.|\n)*?--stamp\s+[^\s]*?_validate_manifests_(?<destComponentManifest>[-\w.]+?)?\.action\.stamp\b)?/,
     /(?:.|\n)*?\svalidate-references/,
-    /(?:.|\n)*?--component-manifest\s+\.\.\/\.\.\/(?<manifestSourcePath>[^\s]*\/(?<componentName>[^/.]+)\.cmx]?)/,
+    /(?:.|\n)*?--component-manifest\s+(?<pathRoot>(?:\.\.\/\.\.)|(?:obj))\/(?<manifestPath>[^\s]*\/(?<fallbackComponentName>[^/.]+)\.cm[xl]?)/,
     /(?:.|\n)*?--gn-label\s+\/\/(?<targetBuildDir>[^$]+)\$:/,
     /(?<fallbackComponentTarget>[-\w]+)?\b/,
   ].map(r => r.source).join(''));
 
-  static extractManifestPathAndCmxComponent(line: string): [string, string, string] | undefined {
-    const match = Provider._validateCmxRegEx.exec(line);
+  static extractManifestPathAndComponentFromCmcValidate(line: string, buildDir: string): [string, string, string] | undefined {
+    const match = Provider._cmcValidateRefsRegEx.exec(line);
     if (!match) {
       return;
     }
 
     const [
       , // full match
-      prefComponentTarget,
-      manifestSourcePath,
-      componentName,
+      destComponentManifest,
+      pathRoot,
+      manifestPath,
+      fallbackComponentName,
       targetBuildDir,
       fallbackComponentTarget,
     ] = match;
 
+    let adjustedManifestPath = manifestPath;
+    if (pathRoot !== '../..') {
+      adjustedManifestPath = `../../${buildDir}/${manifestPath}`;
+    }
+
     let componentTarget;
-    if (prefComponentTarget) {
-      componentTarget = prefComponentTarget;
+    let componentName;
+    if (destComponentManifest) {
+      componentTarget = destComponentManifest;
+      componentName = componentTarget.replace(/\.cmx?$/, '');
     } else {
       componentTarget = fallbackComponentTarget.replace(
         /_cmc_validate_references$/,
         '',
       );
+      componentName = fallbackComponentName;
     }
 
     const componentTargetPath = `${targetBuildDir}:${componentTarget}`;
 
     return [
-      manifestSourcePath,
+      adjustedManifestPath,
       componentName,
       componentTargetPath,
     ];
   }
 
-  private static _cmcBuildRegEx = new RegExp([
+  private static _cmcCompileCmlRegEx = new RegExp([
     /^\s*command\s*=(?:.|\n)*?\/cmc\s+compile/,
-    /\s+\.\.\/\.\.\/(?<manifestSourcePath>[^.]+\.cml]?)/,
+    /\s+\.\.\/\.\.\/(?<manifestPath>[^.]+\.cml]?)/,
     /\s+--output\s+obj\/[^\s]+\/(?<componentName>[^/.]+)\.cm\s/,
     /(?:.|\n)*--depfile\s+obj\/(?<targetBuildDir>[^\s]+)\/(?<componentTarget>[^/.]+)(?:\.cm)?\.d/,
   ].map(r => r.source).join(''));
 
   static extractManifestPathAndCmlComponent(line: string): [string, string, string] | undefined {
-    const match = Provider._cmcBuildRegEx.exec(line);
+    const match = Provider._cmcCompileCmlRegEx.exec(line);
     if (!match) {
       return;
     }
 
     const [
       , // full match
-      manifestSourcePath,
+      manifestPath,
       componentName,
       targetBuildDir,
       componentTarget,
@@ -498,7 +660,7 @@ export class Provider implements
     const componentTargetPath = `${targetBuildDir}:${componentTarget}`;
 
     return [
-      manifestSourcePath,
+      manifestPath,
       componentName,
       componentTargetPath,
     ];
@@ -531,12 +693,7 @@ export class Provider implements
     ];
   }
 
-  private async _getReferencesToManifests(
-    baseUri: vscode.Uri,
-    buildDir: string
-  ): Promise<Map<string, vscode.Location[]>> {
-    const packageAndComponentToReferences = new Map<string, vscode.Location[]>();
-
+  private async _getReferencesToManifests(): Promise<boolean> {
     const gitArgs = [
       '--no-pager',
       'grep',
@@ -555,27 +712,27 @@ export class Provider implements
       `Searching for component URLs('fuchsia-pkg://...cm[x]') referenced from any text document ` +
       `in the 'fuchsia.git' repo, by running the command: \n\n` +
       `  \`git ${gitArgs.join(' ')}\`\n\n` +
-      `from the '${baseUri.path}' directory.`
+      `from the '${this._baseUri.path}' directory.`
     );
 
     let gitGrep = child_process.spawnSync(
       'git',
       gitArgs,
-      { cwd: `${baseUri.path}` }
+      { cwd: `${this._baseUri.path}` }
     );
 
     if (gitGrep.error) {
       error(
         `Error executing the \`git grep\` command: '${gitGrep.error}'\n`
       );
-      return packageAndComponentToReferences; // return an empty map
+      return false;
     }
 
     if (gitGrep.status !== 0) {
       error(
         `Error (${gitGrep.status}) executing the \`git grep\` command: '${gitGrep.stderr}'\n`
       );
-      return packageAndComponentToReferences; // return an empty map
+      return false;
     }
 
     const text = gitGrep.stdout.toString();
@@ -602,32 +759,33 @@ export class Provider implements
         const packageName = match[1];
         const componentName = match[2];
         const column = match.index - 1;
-        const packageAndComponent = `${packageName}/${componentName}`;
-        const sourceUri = baseUri.with({ path: `${baseUri.path}/${path}` });
-        const range = new vscode.Range(
-          lineNumber,
-          column,
-          lineNumber,
-          column + componentUrl.length,
-        );
-        const location = new vscode.Location(sourceUri, range);
-        let references = packageAndComponentToReferences.get(packageAndComponent);
-        if (!references) {
-          references = [];
-          packageAndComponentToReferences.set(packageAndComponent, references);
-        }
+        const sourceUri = this._baseUri.with({ path: `${this._baseUri.path}/${path}` });
+        this.addReference(packageName, componentName, componentUrl, sourceUri, lineNumber, column);
+        // const packageAndComponent = `${packageName}/${componentName}`;
+        // const range = new vscode.Range(
+        //   lineNumber,
+        //   column,
+        //   lineNumber,
+        //   column + componentUrl.length,
+        // );
+        // const location = new vscode.Location(sourceUri, range);
+        // let references = this._packageAndComponentToReferences.get(packageAndComponent);
+        // if (!references) {
+        //   references = [];
+        //   this._packageAndComponentToReferences.set(packageAndComponent, references);
+        // }
+        // references.push(location);
         if (!loggedAtLeastOneExample) {
           loggedAtLeastOneExample = true;
           debug([
             `Getting references to manifests. For example, '${componentUrl}' is referenced by `,
-            `'${location.uri.fsPath}:`,
-            `${location.range.start.line + 1}:`,
-            `${location.range.start.character + 1}:`,
-            `${location.range.end.line + 1}:`,
-            `${location.range.end.character + 1}`,
+            `'${sourceUri.fsPath}:`,
+            `${lineNumber + 1}:`,
+            `${column + 1}:`,
+            `${lineNumber + 1}:`,
+            `${column + componentUrl.length + 1}`,
           ].join(''));
         }
-        references.push(location);
       }
       if (!loggedAtLeastOneExample) {
         loggedAtLeastOneExample = true;
@@ -646,19 +804,19 @@ export class Provider implements
         `No component URLs ('fuchsia-pkg://...cm[x]') were found in the 'fuchsia.git' repo, by ` +
         `running the command:\n\n` +
         `  \`git ${gitArgs.join(' ')}\`\n\n` +
-        `from the '${baseUri.path}' directory.`
+        `from the '${this._baseUri.path}' directory.`
       );
     }
-    return packageAndComponentToReferences;
+    return true;
   }
 
   // TODO(richkadel): find links to fuchsia Service declarations in .fidl files using (I suggest)
   // a `git` command (since we know this works) equivalent of:
-  //   $ find ${baseUri}/${buildDir} -name '*fidl.json'
+  //   $ find ${this._baseUri}/${buildDir} -name '*fidl.json'
   //
   // for each matched file, use VS Code JSON parsing APIs to do the equivalent of:
   //   $ jq '.interface_declarations[] | .name,.location' \
-  //     ${baseUri}/${buildDir}/fidling/gen/sdk/fidl/fuchsia.logger/fuchsia.logger.fidl.json
+  //     ${this._baseUri}/${buildDir}/fidling/gen/sdk/fidl/fuchsia.logger/fuchsia.logger.fidl.json
   //   "fuchsia.logger/Log"
   //   {
   //       "filename": "../../sdk/fidl/fuchsia.logger/logger.fidl",
@@ -692,9 +850,11 @@ export class Provider implements
       const startPos = document.positionAt(match.index);
       const endPos = document.positionAt(match.index + match[0].length);
       const linkRange = new vscode.Range(startPos, endPos);
-      const documentUri = this._packageAndComponentToSourceUri.get(
-        `${packageName}/${componentName}`
-      );
+      const packageAndComponent = `${packageName}/${componentName}`;
+      let documentUri = this._packageAndComponentToManifestUri.get(packageAndComponent);
+      if (!documentUri) {
+        documentUri = this._packageAndComponentToManifestUri.get(_normalize(packageAndComponent));
+      }
       if (documentUri) {
         links.push(new vscode.DocumentLink(linkRange, documentUri));
       }
@@ -715,12 +875,15 @@ export class Provider implements
     if (document.languageId !== 'untitled-fuchsia-manifest' && ext !== 'cml' && ext !== 'cmx') {
       return;
     }
-    const references: vscode.Location[] = [];
     const packageAndComponent = this._sourcePathToPackageAndComponent.get(document.uri.fsPath);
     if (!packageAndComponent) {
       return;
     }
-    return this._packageAndComponentToReferences.get(packageAndComponent);
+    let references = this._packageAndComponentToReferences.get(packageAndComponent);
+    if (!references) {
+      references = this._packageAndComponentToReferences.get(_normalize(packageAndComponent));
+    }
+    return references;
   }
 
   provideTerminalLinks(
@@ -738,9 +901,11 @@ export class Provider implements
         packageName,
         componentName,
       ] = match;
-      const documentUri = this._packageAndComponentToSourceUri.get(
-        `${packageName}/${componentName}`
-      );
+      const packageAndComponent = `${packageName}/${componentName}`;
+      let documentUri = this._packageAndComponentToManifestUri.get(packageAndComponent);
+      if (!documentUri) {
+        documentUri = this._packageAndComponentToManifestUri.get(_normalize(packageAndComponent));
+      }
       let tooltip;
       if (documentUri) {
         tooltip = 'Open component manifest';
@@ -767,29 +932,43 @@ export class Provider implements
     }
   }
 
-  // For testing
   addLink(packageName: string, componentName: string, manifestUri: vscode.Uri) {
     const packageAndComponent = `${packageName}/${componentName}`;
-    this._packageAndComponentToSourceUri.set(packageAndComponent, manifestUri);
+    this._addLinkToMap(packageAndComponent, manifestUri);
+    const normalizedPackageAndComponent = _normalize(packageAndComponent);
+    if (normalizedPackageAndComponent !== packageAndComponent) {
+      this._addLinkToMap(normalizedPackageAndComponent, manifestUri);
+    }
+  }
+
+  private _addLinkToMap(packageAndComponent: string, manifestUri: vscode.Uri) {
+    this._packageAndComponentToManifestUri.set(packageAndComponent, manifestUri);
     this._sourcePathToPackageAndComponent.set(manifestUri.fsPath, packageAndComponent);
   }
 
-  // For testing
   addReference(
     packageName: string,
     componentName: string,
+    componentUrl: string,
     referencedByUri: vscode.Uri,
     lineNumber: number,
     column: number,
   ) {
     const packageAndComponent = `${packageName}/${componentName}`;
-    const componentUrl = `fuchsia-pkg://fuchsia.com/${packageName}#meta/${componentName}.cm`;
     const range = new vscode.Range(
       lineNumber,
       column,
       lineNumber,
       column + componentUrl.length,
     );
+    this._addReferenceToMap(packageAndComponent, referencedByUri, range);
+    const normalizedPackageAndComponent = _normalize(packageAndComponent);
+    if (normalizedPackageAndComponent !== packageAndComponent) {
+      this._addReferenceToMap(normalizedPackageAndComponent, referencedByUri, range);
+    }
+  }
+
+  private _addReferenceToMap(packageAndComponent: string, referencedByUri: vscode.Uri, range: vscode.Range) {
     let references = this._packageAndComponentToReferences.get(packageAndComponent);
     if (!references) {
       references = [];
@@ -797,4 +976,8 @@ export class Provider implements
     }
     references.push(new vscode.Location(referencedByUri, range));
   }
+}
+
+function _normalize(packageAndComponent: string): string {
+  return packageAndComponent.replace(/-/g, '_');
 }
