@@ -2,7 +2,7 @@
     "name": "fuchsiaware",
     "displayName": "FuchsiAware",
     "description": "Assist browsing Fuchsia artifacts, such as by linking from component URLs to component manifests.",
-    "version": "0.0.5",
+    "version": "0.1.0",
     "publisher": "RichKadel",
     "license": "Apache-2.0",
     "engines": {
