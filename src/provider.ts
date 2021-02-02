@@ -28,8 +28,8 @@ const USE_HEURISTICS_TO_FIND_MORE_LINKS = vscode.workspace.getConfiguration().ge
   'useHeuristicsToFindMoreLinks'
 ) ?? false;
 
-interface ComponentUrlTerminalLink extends vscode.TerminalLink {
-  documentUri?: vscode.Uri;
+interface FuchsiAwareLink extends vscode.TerminalLink {
+  uri?: vscode.Uri;
 }
 
 export class Provider implements
@@ -659,29 +659,51 @@ export class Provider implements
   // And use that information to add additional service links via the provideDocumentLinks()
   // meethod:
 
-  provideDocumentLinks(
-    document: vscode.TextDocument,
-    token: vscode.CancellationToken,
-  ): vscode.DocumentLink[] | undefined {
-    // patterns end in either '.cm' or '.cmx'
-    const regEx = /\bfuchsia-pkg:\/\/fuchsia.com\/([-\w]+)(?:\?[^#]*)?#meta\/([-\w]+).cmx?\b/g;
-    const links: vscode.DocumentLink[] = [];
-    const text = document.getText();
+  private static _findLinksOredRegEx = new RegExp(
+    '(?:(?:' +
+    [
+      // Note the suffix `.cmx?`: component URLs end in either '.cm' or '.cmx'
+      /\bfuchsia-pkg:\/\/fuchsia.com\/(?<packageName>[-\w]+)(?:\?[^#]*)?#meta\/(?<componentName>[-\w]+).cmx?\b/,
+      /(?:https?:\/\/)?fxr(?:ev.dev)?\/(?<revId>\d+)/,
+      /(?:https?:\/\/)?fxb(?:ug.dev)?\/(?<bugId>\d+)/,
+    ].map(r => r.source).join(')|(?:')
+    + '))',
+    'g'
+  );
+
+  findLinks(text: string): FuchsiAwareLink[] {
+    const links: FuchsiAwareLink[] = [];
     let match;
-    while ((match = regEx.exec(text))) {
-      const packageName = match[1];
-      const componentName = match[2];
-      const startPos = document.positionAt(match.index);
-      const endPos = document.positionAt(match.index + match[0].length);
-      const linkRange = new vscode.Range(startPos, endPos);
-      const packageAndComponent = `${packageName}/${componentName}`;
-      let documentUri = this._packageAndComponentToManifestUri.get(packageAndComponent);
-      if (NORMALIZE_WORD_SEPARATORS && !documentUri) {
-        documentUri = this._packageAndComponentToManifestUri.get(_normalize(packageAndComponent));
+    while ((match = Provider._findLinksOredRegEx.exec(text))) {
+      const [
+        fullMatch,
+        packageName,
+        componentName,
+        revId,
+        bugId,
+      ] = match;
+      const startIndex = match.index;
+      const length = fullMatch.length;
+      const webPath = revId ? `fxrev.dev/${revId}` : `fxbug.dev/${bugId}`;
+      let tooltip: string | undefined;
+      let uri: vscode.Uri | undefined;
+      if (packageName && componentName) {
+        const packageAndComponent = `${packageName}/${componentName}`;
+        uri = this._packageAndComponentToManifestUri.get(packageAndComponent);
+        if (NORMALIZE_WORD_SEPARATORS && !uri) {
+          uri = this._packageAndComponentToManifestUri.get(_normalize(packageAndComponent));
+        }
+        if (uri) {
+          tooltip = 'Open component manifest';
+        } else if (SHOW_UNRESOLVED_TERMINAL_LINKS) {
+          tooltip = 'Manifest not found!';
+        } else {
+          continue; // don't add the link
+        }
+      } else if (webPath) {
+        uri = vscode.Uri.parse(`https://${webPath}`);
       }
-      if (documentUri) {
-        links.push(new vscode.DocumentLink(linkRange, documentUri));
-      }
+      links.push({ startIndex, length, tooltip, uri });
     }
     return links;
   }
@@ -710,46 +732,32 @@ export class Provider implements
     return references;
   }
 
+  provideDocumentLinks(
+    document: vscode.TextDocument,
+    token: vscode.CancellationToken,
+  ): vscode.DocumentLink[] | undefined {
+    const documentLinks: vscode.DocumentLink[] = [];
+    for (const link of this.findLinks(document.getText())) {
+      if (link.uri) {
+        const startPos = document.positionAt(link.startIndex);
+        const endPos = document.positionAt(link.startIndex + link.length);
+        const linkRange = new vscode.Range(startPos, endPos);
+        documentLinks.push(new vscode.DocumentLink(linkRange, link.uri));
+      }
+    }
+    return documentLinks;
+  }
+
   provideTerminalLinks(
     context: vscode.TerminalLinkContext,
     token: vscode.CancellationToken
   ): vscode.TerminalLink[] | undefined {
-    const regEx = /\bfuchsia-pkg:\/\/fuchsia.com\/([-\w]+)(?:\?[^#]*)?#meta\/([-\w]+).cmx?\b/g;
-    const links: ComponentUrlTerminalLink[] = [];
-    let match;
-    while ((match = regEx.exec(context.line))) {
-      const startIndex = match.index;
-      const [
-        link,
-        packageName,
-        componentName,
-      ] = match;
-      const packageAndComponent = `${packageName}/${componentName}`;
-      let documentUri = this._packageAndComponentToManifestUri.get(packageAndComponent);
-      if (NORMALIZE_WORD_SEPARATORS && !documentUri) {
-        documentUri = this._packageAndComponentToManifestUri.get(_normalize(packageAndComponent));
-      }
-      let tooltip;
-      if (documentUri) {
-        tooltip = 'Open component manifest';
-      } else if (SHOW_UNRESOLVED_TERMINAL_LINKS) {
-        tooltip = 'Manifest not found!';
-      } else {
-        continue; // don't add the link
-      }
-      links.push({
-        startIndex,
-        length: link.length,
-        tooltip,
-        documentUri,
-      });
-    }
-    return links;
+    return this.findLinks(context.line);
   }
 
-  handleTerminalLink(link: ComponentUrlTerminalLink) {
-    if (link.documentUri) {
-      const document = vscode.workspace.openTextDocument(link.documentUri).then(document => {
+  handleTerminalLink(link: FuchsiAwareLink) {
+    if (link.uri) {
+      const document = vscode.workspace.openTextDocument(link.uri).then(document => {
         vscode.window.showTextDocument(document);
       });
     }

@@ -508,7 +508,7 @@ obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2_archivist_
     assert.strictEqual(
       manifestSourcePath,
       'src/diagnostics/archivist/tests/v2/meta/archivist_integration_tests.cml'
-      );
+    );
     assert.strictEqual(componentName, 'archivist-integration-tests-v2_archivist_integration_tests');
     // THIS SEEMS WRONG:
     assert.strictEqual(
@@ -935,7 +935,7 @@ obj/src/sys/test_manager/test_manager_pkg/package_manifest.json
   });
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
-  test('matches .cm files (compiled cml)', async () => {
+  test('provideDocumentLinks matches .cm files (compiled cml)', async () => {
     const docWithComponentUrl = await vscode.workspace.openTextDocument({
       content: `
 componentUrl: "fuchsia-pkg://fuchsia.com/some-package?1a2b3c4d5e6f#meta/some-component.cm"
@@ -945,21 +945,53 @@ componentUrl: "fuchsia-pkg://fuchsia.com/some-package?1a2b3c4d5e6f#meta/some-com
       'some-package', 'some-component', vscode.Uri.file('src/some/path.cml_or_cmx'));
     const links = provider.provideDocumentLinks(
       docWithComponentUrl, new vscode.CancellationTokenSource().token);
-    assert.strictEqual(1, links?.length);
+    assert.deepStrictEqual(links?.map(link => link.target?.path), [
+      '/src/some/path.cml_or_cmx',
+    ]);
   });
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
-  test('matches .cmx files', async () => {
+  test('provideDocumentLinks matches .cmx files, and fxrev and fxbug IDs', async () => {
     const docWithComponentUrl = await vscode.workspace.openTextDocument({
       content: `
 componentUrl: "fuchsia-pkg://fuchsia.com/some-package?1a2b3c4d5e6f#meta/some-component.cmx"
+// ISSUE(fxrev.dev/1012345):
+// ISSUE(http://fxrev.dev/2012345):
+// ISSUE(https://fxrev.dev/3012345):
+// ISSUE(fxr/4012345):
+// ISSUE(fxbug.dev/5012345):
+// ISSUE(http://fxbug.dev/6012345):
+// ISSUE(https://fxbug.dev/7012345):
+// ISSUE(fxb/8012345):
 `
     });
     provider.addLink(
       'some-package', 'some-component', vscode.Uri.file('src/some/path.cml_or_cmx'));
     const links = provider.provideDocumentLinks(
       docWithComponentUrl, new vscode.CancellationTokenSource().token);
-    assert.strictEqual(1, links?.length);
+    assert.deepStrictEqual(links?.map(link => link.target?.toString()), [
+      'file:///src/some/path.cml_or_cmx',
+      'https://fxrev.dev/1012345',
+      'https://fxrev.dev/2012345',
+      'https://fxrev.dev/3012345',
+      'https://fxrev.dev/4012345',
+      'https://fxbug.dev/5012345',
+      'https://fxbug.dev/6012345',
+      'https://fxbug.dev/7012345',
+      'https://fxbug.dev/8012345',
+    ]);
+  });
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  test('provideTerminalLinks matches .cmx files', async () => {
+    const context = {
+      line: `    componentUrl: "fuchsia-pkg://fuchsia.com/some-package#meta/some-component.cmx"`
+    };
+    provider.addLink(
+      'some-package', 'some-component', vscode.Uri.file('src/some/path.cml_or_cmx'));
+    const links = provider.provideTerminalLinks(
+      <vscode.TerminalLinkContext>context, new vscode.CancellationTokenSource().token);
+    assert.strictEqual((links ?? [])[0].startIndex, 19);
   });
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1011,6 +1043,9 @@ componentUrl: "fuchsia-pkg://fuchsia.com/${packageName}?1a2b3c4d5e6f#meta/${comp
       { includeDeclaration: false },
       new vscode.CancellationTokenSource().token,
     );
-    assert.strictEqual(2, references?.length);
+    assert.deepStrictEqual(references?.map(location => location.uri.path), [
+      '/src/some/path_to_some_referrer.txt',
+      '/src/some/path_to_another_referrer.txt',
+    ]);
   });
 });

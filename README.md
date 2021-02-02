@@ -10,18 +10,24 @@ The extension recognizes Fuchsia-specific artifacts in the Fuchsia Git-based sou
 * Links from fuchsia component URLs (beginning with the `fuchsia-pkg` scheme), in any file, to the
   component's "manifest" source file (either `.cml` or `.cmx`).
 
-![document-links](images/document-links.png)
+&emsp;&emsp;&emsp;![document-links](images/document-links.png)
 
 * Links from fuchsia component URLs (beginning with the `fuchsia-pkg` scheme) in terminal output.
   component's "manifest" source file (either `.cml` or `.cmx`).
 
-![terminal-links](images/terminal-links.png)
+&emsp;&emsp;&emsp;![terminal-links](images/terminal-links.png)
 
 * References back from the manifest to any known source with a `fuchsia-pkg` component URL to the
   manifest's component. Right-click anywhere in the manifest source (in the VS Code editor), and
   select one of the menu options "Go to References" or "Find References".
 
-![references](images/references.png)
+&emsp;&emsp;&emsp;![references](images/references.png)
+
+* Activates links to prefixed Fuchsia revision and bug IDs; for example:
+  - `fxrev.dev/[revision ID]` (and legacy `fxr/[revision ID]`) link to `https://fxrev.dev/[revision ID]`
+  - `fxbug.dev/[bug ID]` (and legacy `fxb/[bug ID]`) link to `https://fxbug.dev/[revision ID]`
+
+&emsp;&emsp;&emsp;![fxrev-and-fxbug-links](images/fxrev-and-fxbug-links.png)
 
 ## Minimum Requirements and Implementation Details
 

@@ -36,5 +36,10 @@ All notable changes to the "fuchsiaware" extension will be documented in this fi
 
 ## [0.1.0]
 
-- Fixes:
-  * Published to marketplace
+- Initial public release, published to the Visual Studio Marketplace.
+
+## [0.2.0]
+
+- New feature: Linkifies fxrev.dev and fxbug.dev links
+  * Activates `fxrev.dev/[revision ID]` (and legacy `fxr/[revision ID]`) links
+  * Activates `fxbug.dev/[bug ID]` (and legacy `fxb/[bug ID]`) links
