@@ -756,7 +756,12 @@ export class Provider implements
   }
 
   handleTerminalLink(link: FuchsiAwareLink) {
-    if (link.uri) {
+    if (!link.uri) {
+      return;
+    }
+    if (['http', 'https'].indexOf(link.uri.scheme) >= 0) {
+      vscode.env.openExternal(link.uri);
+    } else {
       const document = vscode.workspace.openTextDocument(link.uri).then(document => {
         vscode.window.showTextDocument(document);
       });
