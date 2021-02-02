@@ -2,11 +2,11 @@
     "name": "fuchsiaware",
     "displayName": "FuchsiAware",
     "description": "Assist browsing Fuchsia artifacts, such as by linking from component URLs to component manifests.",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "publisher": "RichKadel",
     "license": "Apache-2.0",
     "engines": {
-        "vscode": "^1.52.0"
+        "vscode": "^1.48.0"
     },
     "categories": [
         "Other"
@@ -85,7 +85,7 @@
         "test": "node ./out/test/runTest.js"
     },
     "devDependencies": {
-        "@types/vscode": "^1.52.0",
+        "@types/vscode": "^1.48.0",
         "@types/glob": "^7.1.3",
         "@types/mocha": "^8.0.4",
         "@types/node": "^12.11.7",
