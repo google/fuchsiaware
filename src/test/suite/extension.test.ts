@@ -22,7 +22,6 @@ suite('Extension Test Suite', () => {
 
   const baseUri = vscode.Uri.file('fuchsia');
   const buildDir = 'out/default.test';
-  const provider = new Provider(baseUri, buildDir);
 
   // TODO(richkadel): Replace these hardcoded copies of specific lines from the `toolchain.ninja`
   // file with a cached but quickly refreshed copy of the developer's most current `toolchain.ninja`
@@ -936,22 +935,23 @@ obj/src/sys/test_manager/test_manager_pkg/package_manifest.json
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
   test('provideDocumentLinks matches .cm files (compiled cml)', async () => {
+    const provider = new Provider(baseUri, buildDir);
     const docWithComponentUrl = await vscode.workspace.openTextDocument({
       content: `
 componentUrl: "fuchsia-pkg://fuchsia.com/some-package?1a2b3c4d5e6f#meta/some-component.cm"
 `
     });
-    provider.addLink(
-      'some-package', 'some-component', vscode.Uri.file('src/some/path.cml_or_cmx'));
+    provider.addLink('some-package', 'some-component', 'src/some/path.cml_or_cmx');
     const links = provider.provideDocumentLinks(
       docWithComponentUrl, new vscode.CancellationTokenSource().token);
     assert.deepStrictEqual(links?.map(link => link.target?.path), [
-      '/src/some/path.cml_or_cmx',
+      '/fuchsia/src/some/path.cml_or_cmx',
     ]);
   });
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
   test('provideDocumentLinks matches .cmx files, and fxrev and fxbug IDs', async () => {
+    const provider = new Provider(baseUri, buildDir);
     const docWithComponentUrl = await vscode.workspace.openTextDocument({
       content: `
 componentUrl: "fuchsia-pkg://fuchsia.com/some-package?1a2b3c4d5e6f#meta/some-component.cmx"
@@ -965,12 +965,11 @@ componentUrl: "fuchsia-pkg://fuchsia.com/some-package?1a2b3c4d5e6f#meta/some-com
 // ISSUE(fxb/8012345):
 `
     });
-    provider.addLink(
-      'some-package', 'some-component', vscode.Uri.file('src/some/path.cml_or_cmx'));
+    provider.addLink('some-package', 'some-component', 'src/some/path.cml_or_cmx');
     const links = provider.provideDocumentLinks(
       docWithComponentUrl, new vscode.CancellationTokenSource().token);
     assert.deepStrictEqual(links?.map(link => link.target?.toString()), [
-      'file:///src/some/path.cml_or_cmx',
+      'file:///fuchsia/src/some/path.cml_or_cmx',
       'https://fxrev.dev/1012345',
       'https://fxrev.dev/2012345',
       'https://fxrev.dev/3012345',
@@ -984,11 +983,11 @@ componentUrl: "fuchsia-pkg://fuchsia.com/some-package?1a2b3c4d5e6f#meta/some-com
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
   test('provideTerminalLinks matches .cmx files', async () => {
+    const provider = new Provider(baseUri, buildDir);
     const context = {
       line: `    componentUrl: "fuchsia-pkg://fuchsia.com/some-package#meta/some-component.cmx"`
     };
-    provider.addLink(
-      'some-package', 'some-component', vscode.Uri.file('src/some/path.cml_or_cmx'));
+    provider.addLink('some-package', 'some-component', 'src/some/path.cml_or_cmx');
     const links = provider.provideTerminalLinks(
       <vscode.TerminalLinkContext>context, new vscode.CancellationTokenSource().token);
     assert.strictEqual((links ?? [])[0].startIndex, 19);
@@ -996,6 +995,7 @@ componentUrl: "fuchsia-pkg://fuchsia.com/some-package?1a2b3c4d5e6f#meta/some-com
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
   test('finds references to a manifest', async () => {
+    const provider = new Provider(baseUri, buildDir);
     const referencedManifestDoc = await vscode.languages.setTextDocumentLanguage(
       await vscode.workspace.openTextDocument({
         content: `{
@@ -1017,7 +1017,8 @@ componentUrl: "fuchsia-pkg://fuchsia.com/some-package?1a2b3c4d5e6f#meta/some-com
 componentUrl: "fuchsia-pkg://fuchsia.com/${packageName}?1a2b3c4d5e6f#meta/${componentName}.cmx"
 `
     });
-    provider.addLink(packageName, componentName, referencedManifestDoc.uri);
+
+    provider.addLink(packageName, componentName, referencedManifestDoc.uri.fsPath);
 
     provider.addReference(
       packageName,

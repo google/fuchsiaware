@@ -23,10 +23,10 @@ const SHOW_UNRESOLVED_TERMINAL_LINKS = vscode.workspace.getConfiguration().get(
 ) ?? false;
 const NORMALIZE_WORD_SEPARATORS = vscode.workspace.getConfiguration().get(
   'fuchsiAware.normalizeWordSeparators'
-) ?? false;
+) ?? true;
 const USE_HEURISTICS_TO_FIND_MORE_LINKS = vscode.workspace.getConfiguration().get(
-  'useHeuristicsToFindMoreLinks'
-) ?? false;
+  'fuchsiAware.useHeuristicsToFindMoreLinks'
+) ?? true;
 
 interface FuchsiAwareLink extends vscode.TerminalLink {
   uri?: vscode.Uri;
@@ -41,9 +41,12 @@ export class Provider implements
 
   private _baseUri: vscode.Uri;
   private _buildDir: string;
+  private _manifestFileNameToPackageAndComponents = new Map<string, string[]>();
+  private _componentToSomeManifestPath = new Map<string, string>();
   private _packageAndComponentToManifestUri = new Map<string, vscode.Uri>();
-  private _sourcePathToPackageAndComponent = new Map<string, string>();
+  private _sourcePathToPackageAndComponents = new Map<string, string[]>();
   private _packageAndComponentToReferences = new Map<string, vscode.Location[]>();
+  private _nonNormalizedLinksResolved = 0;
 
   constructor(baseUri: vscode.Uri, buildDir: string) {
     this._baseUri = baseUri;
@@ -51,8 +54,10 @@ export class Provider implements
   }
 
   dispose() {
+    this._manifestFileNameToPackageAndComponents.clear();
+    this._componentToSomeManifestPath.clear();
     this._packageAndComponentToManifestUri.clear();
-    this._sourcePathToPackageAndComponent.clear();
+    this._sourcePathToPackageAndComponents.clear();
     this._packageAndComponentToReferences.clear();
   }
 
@@ -62,7 +67,82 @@ export class Provider implements
       this._getReferencesToManifests()
     ]);
 
-    return gotLinks && gotReferences;
+    if (!(gotLinks && gotReferences)) {
+      return false;
+    }
+
+    if (USE_HEURISTICS_TO_FIND_MORE_LINKS) {
+      this._resolveUnmatchedUrlsToAnyMatchingManifestByName();
+    }
+
+    if (log.DEBUG) {
+      let totalReferences = 0;
+      for (const references of this._packageAndComponentToReferences.values()) {
+        totalReferences += references.length;
+      }
+      let totalUnresolvedLinks = 0;
+      for (const [packageAndComponent, locations] of this._packageAndComponentToReferences) {
+        if (!this._packageAndComponentToManifestUri.get(packageAndComponent)) {
+          totalUnresolvedLinks++;
+          const [
+            packageName,
+            componentName,
+          ] = packageAndComponent.split('/');
+          log.debug(
+            `UNRESOLVED: fuchsia-pkg://fuchsia.com/${packageName}?#meta/${componentName}.cm(x)?`
+          );
+        }
+      }
+      // TODO(richkadel): Clean up and expand on these reported stats
+      log.debug(`Link Resolution Statistics`);
+      log.debug(`==========================`);
+      log.debug(`unresolved links = ${totalUnresolvedLinks}`);
+      log.debug(`manifests = ${this._manifestFileNameToPackageAndComponents.size}`);
+      log.debug(`references = ${totalReferences}`);
+      log.debug(`nonNormalizedLinksResolved = ${this._nonNormalizedLinksResolved}`);
+    }
+
+    return true;
+  }
+
+  // For any unresolved component URL link for which there is a manifest with the same component
+  // name, add the link. These links are not guaranteed to be accurate, and there may be
+  // duplicates, but the provide a best-effort resolution, which may still be helpful.
+  private _resolveUnmatchedUrlsToAnyMatchingManifestByName() {
+    for (const [packageAndComponent, locations] of this._packageAndComponentToReferences) {
+      if (!this._packageAndComponentToManifestUri.get(packageAndComponent)) {
+        const [
+          packageName,
+          componentName,
+        ] = packageAndComponent.split('/');
+        for (const suffixToRemove of [
+          , // undefined (first, try to find a manifestPath without removing any suffix)
+          /_allowed$/,
+          /-isolated$/,
+          /_test$/,
+          /_tests$/,
+        ]) {
+          let lookupByComponentName = componentName;
+          if (suffixToRemove) {
+            lookupByComponentName = componentName.replace(suffixToRemove, '');
+            if (lookupByComponentName === componentName) {
+              continue;
+            }
+          }
+          let manifestPath = this._componentToSomeManifestPath.get(lookupByComponentName);
+          if (!manifestPath && NORMALIZE_WORD_SEPARATORS) {
+            const normalizedComponentName = _normalize(lookupByComponentName);
+            if (normalizedComponentName !== lookupByComponentName) {
+              manifestPath = this._componentToSomeManifestPath.get(normalizedComponentName);
+            }
+          }
+          if (manifestPath) {
+            this.addLink(packageName, componentName, manifestPath);
+            break;
+          }
+        }
+      }
+    }
   }
 
   private async _getLinksToManifests(): Promise<boolean> {
@@ -250,14 +330,13 @@ export class Provider implements
         }
 
         const [componentName, manifestPath] = componentNameAndManifest;
-        const manifestUri = this._baseUri.with({ path: `${this._baseUri.path}/${manifestPath}` });
-        this.addLink(packageName, componentName, manifestUri);
+        this.addLink(packageName, componentName, manifestPath);
 
         const subComponentTargets =
           componentTargetPathToSubComponentTargets.get(componentTargetPath);
         if (subComponentTargets) {
           for (const subComponentTarget of subComponentTargets) {
-            this.addLink(packageName, subComponentTarget, manifestUri);
+            this.addLink(packageName, subComponentTarget, manifestPath);
           }
         }
 
@@ -267,7 +346,7 @@ export class Provider implements
           if (nameWithoutComponentSuffix !== componentName) {
             const targetWithoutComponentSuffix =
               componentTargetPath.replace(/_component(_generated_manifest)?$/, '');
-            this.addLink(packageName, nameWithoutComponentSuffix, manifestUri);
+            this.addLink(packageName, nameWithoutComponentSuffix, manifestPath);
           }
         }
       }
@@ -431,7 +510,10 @@ export class Provider implements
     /(?<fallbackComponentTarget>[-\w]+)?\b/,
   ].map(r => r.source).join(''));
 
-  static extractManifestPathAndComponentFromCmcValidate(line: string, buildDir: string): [string, string, string] | undefined {
+  static extractManifestPathAndComponentFromCmcValidate(
+    line: string,
+    buildDir: string,
+  ): [string, string, string] | undefined {
     const match = Provider._cmcValidateRefsRegEx.exec(line);
     if (!match) {
       return;
@@ -531,62 +613,111 @@ export class Provider implements
     ];
   }
 
-  private async _getReferencesToManifests(): Promise<boolean> {
+  private async _askGit(gitArgs: string[]): Promise<string | undefined> {
+    let git = child_process.spawnSync(
+      'git',
+      gitArgs,
+      { cwd: `${this._baseUri.path}` }
+    );
+
+    if (git.error) {
+      log.error(
+        `Error executing \`git\`: '${git.error}'\n`
+      );
+      return;
+    }
+
+    if (git.status !== 0) {
+      log.error(
+        `Error (${git.status}) executing \`git\`: '${git.stderr}'\n`
+      );
+      return;
+    }
+
+    return git.stdout.toString();
+  }
+
+  private async _gitLsFiles(gitLsFilesGlobs: string[]): Promise<string | undefined> {
+    let gitArgs = [
+      '--no-pager',
+      '--glob-pathspecs',
+      'ls-files',
+      '--cached', // ensure cached mode (normally the default)
+      '--recurse-submodules', // requires --cached
+      '--',
+    ];
+
+    gitArgs = gitArgs.concat(gitLsFilesGlobs);
+
+    log.info(
+      `Searching the 'fuchsia.git' repo, by running the command: \n\n` +
+      `  \`git ${gitArgs.join(' ')}\`\n\n` +
+      `from the '${this._baseUri.path}' directory.`
+    );
+
+    return this._askGit(gitArgs);
+  }
+
+  // Note, this private function may be useful for experimentation, or a future feature, but is
+  // currently unused.
+  private async _findAllManifests(): Promise<string[] | undefined> {
+    return (await this._gitLsFiles([
+      '**/?*.cmx',
+      '**/?*.cml',
+    ]) ?? '').split('\n');
+  }
+
+  private async _gitGrep(grepExtendedRegEx: string | RegExp): Promise<string | undefined> {
+    if (grepExtendedRegEx instanceof RegExp) {
+      grepExtendedRegEx = grepExtendedRegEx.source;
+    }
+
     const gitArgs = [
       '--no-pager',
       'grep',
       '--recurse-submodules',
-      '-I',
+      '-I', // don't match the pattern in binary files
       '--extended-regexp',
       // '--only-matching', // grep BUG! --column value is wrong for second match in line
       // '--column', // not useful without --only-matching
       '--line-number',
       '--no-column',
       '--no-color',
-      'fuchsia-pkg://fuchsia.com/([^#]*)#meta/(-|\\w)*\\.cmx?',
+      grepExtendedRegEx,
     ];
 
     log.info(
-      `Searching for component URLs('fuchsia-pkg://...cm[x]') referenced from any text document ` +
-      `in the 'fuchsia.git' repo, by running the command: \n\n` +
+      `Searching the 'fuchsia.git' repo, by running the command: \n\n` +
       `  \`git ${gitArgs.join(' ')}\`\n\n` +
       `from the '${this._baseUri.path}' directory.`
     );
 
-    let gitGrep = child_process.spawnSync(
-      'git',
-      gitArgs,
-      { cwd: `${this._baseUri.path}` }
+    return this._askGit(gitArgs);
+  }
+
+  private async _getReferencesToManifests(): Promise<boolean> {
+
+    log.info(
+      `Searching for component URLs('fuchsia-pkg://...cm[x]') referenced from any text document.`
     );
 
-    if (gitGrep.error) {
-      log.error(
-        `Error executing the \`git grep\` command: '${gitGrep.error}'\n`
-      );
+    const matches = await this._gitGrep(/fuchsia-pkg:\/\/fuchsia.com\/([^#]*)#meta\/(-|\w)*\.cmx?/);
+    if (!matches) {
       return false;
     }
-
-    if (gitGrep.status !== 0) {
-      log.error(
-        `Error (${gitGrep.status}) executing the \`git grep\` command: '${gitGrep.stderr}'\n`
-      );
-      return false;
-    }
-
-    const text = gitGrep.stdout.toString();
 
     // patterns end in either '.cm' or '.cmx'
-    const urlRegEx = /\bfuchsia-pkg:\/\/fuchsia.com\/([-\w]+)(?:\?[^#]*)?#meta\/([-\w]+).cmx?\b/g;
+    const urlRegEx = /\bfuchsia-pkg:\/\/fuchsia.com\/([-\w]+)(?:\?[^#]*)?#meta\/([-\w]+)\.cmx?\b/g;
 
     let loggedAtLeastOneExample = false;
 
     let start = 0;
-    while (start < text.length) {
-      let end = text.indexOf('\n', start);
+    while (start < matches.length) {
+      let end = matches.indexOf('\n', start);
       if (end === -1) {
-        end = text.length;
+        end = matches.length;
       }
-      const line = text.substr(start, end - start);
+      const line = matches.substr(start, end - start);
       start = end + 1;
       const [path, lineNumberStr] = line.split(':', 2);
       const lineNumber: number = (+lineNumberStr) - 1;
@@ -625,10 +756,7 @@ export class Provider implements
       log.info('The data required by the ReferenceProvider is loaded.');
     } else {
       log.error(
-        `No component URLs ('fuchsia-pkg://...cm[x]') were found in the 'fuchsia.git' repo, by ` +
-        `running the command:\n\n` +
-        `  \`git ${gitArgs.join(' ')}\`\n\n` +
-        `from the '${this._baseUri.path}' directory.`
+        `No component URLs ('fuchsia-pkg://...cm[x]') were found in the 'fuchsia.git' repo`
       );
     }
     return true;
@@ -663,7 +791,7 @@ export class Provider implements
     '(?:(?:' +
     [
       // Note the suffix `.cmx?`: component URLs end in either '.cm' or '.cmx'
-      /\bfuchsia-pkg:\/\/fuchsia.com\/(?<packageName>[-\w]+)(?:\?[^#]*)?#meta\/(?<componentName>[-\w]+).cmx?\b/,
+      /\bfuchsia-pkg:\/\/fuchsia.com\/(?<packageName>[-\w]+)(?:\?[^#]*)?#meta\/(?<componentName>[-\w]+)\.cmx?\b/,
       /(?:https?:\/\/)?fxr(?:ev.dev)?\/(?<revId>\d+)/,
       /(?:https?:\/\/)?fxb(?:ug.dev)?\/(?<bugId>\d+)/,
     ].map(r => r.source).join(')|(?:')
@@ -671,7 +799,7 @@ export class Provider implements
     'g'
   );
 
-  findLinks(text: string): FuchsiAwareLink[] {
+  private _findLinks(text: string): FuchsiAwareLink[] {
     const links: FuchsiAwareLink[] = [];
     let match;
     while ((match = Provider._findLinksOredRegEx.exec(text))) {
@@ -721,15 +849,20 @@ export class Provider implements
     if (document.languageId !== 'untitled-fuchsia-manifest' && ext !== 'cml' && ext !== 'cmx') {
       return;
     }
-    const packageAndComponent = this._sourcePathToPackageAndComponent.get(document.uri.fsPath);
-    if (!packageAndComponent) {
-      return;
+    let sourcePath = document.uri.fsPath;
+    if (document.uri.fsPath.startsWith(this._baseUri.fsPath)) {
+      sourcePath = sourcePath.replace(this._baseUri.fsPath + '/', '');
     }
-    let references = this._packageAndComponentToReferences.get(packageAndComponent);
-    if (NORMALIZE_WORD_SEPARATORS && !references) {
-      references = this._packageAndComponentToReferences.get(_normalize(packageAndComponent));
+    let references = new Set<vscode.Location>();
+    for (let packageAndComponent of this._sourcePathToPackageAndComponents.get(sourcePath) ?? []) {
+      if (NORMALIZE_WORD_SEPARATORS) {
+        packageAndComponent = _normalize(packageAndComponent);
+      }
+      this._packageAndComponentToReferences.get(
+        packageAndComponent
+      )?.forEach(reference => references.add(reference));
     }
-    return references;
+    return Array.from(references.values());
   }
 
   provideDocumentLinks(
@@ -737,7 +870,7 @@ export class Provider implements
     token: vscode.CancellationToken,
   ): vscode.DocumentLink[] | undefined {
     const documentLinks: vscode.DocumentLink[] = [];
-    for (const link of this.findLinks(document.getText())) {
+    for (const link of this._findLinks(document.getText())) {
       if (link.uri) {
         const startPos = document.positionAt(link.startIndex);
         const endPos = document.positionAt(link.startIndex + link.length);
@@ -752,7 +885,7 @@ export class Provider implements
     context: vscode.TerminalLinkContext,
     token: vscode.CancellationToken
   ): vscode.TerminalLink[] | undefined {
-    return this.findLinks(context.line);
+    return this._findLinks(context.line);
   }
 
   handleTerminalLink(link: FuchsiAwareLink) {
@@ -768,20 +901,51 @@ export class Provider implements
     }
   }
 
-  addLink(packageName: string, componentName: string, manifestUri: vscode.Uri) {
-    const packageAndComponent = `${packageName}/${componentName}`;
-    this._addLinkToMap(packageAndComponent, manifestUri);
+  addLink(packageName: string, componentName: string, manifestPath: string) {
+    let packageAndComponent = `${packageName}/${componentName}`;
+
+    let manifestFileName = manifestPath.split('/').slice(-1)[0];
+    let packageAndComponents = this._manifestFileNameToPackageAndComponents.get(manifestFileName);
+    if (!packageAndComponents) {
+      packageAndComponents = [];
+      this._manifestFileNameToPackageAndComponents.set(packageAndComponent, packageAndComponents);
+    }
+    packageAndComponents.push(packageAndComponent);
+
+    if (manifestPath.indexOf(`/${componentName}.cm`) >= 0) {
+      this._componentToSomeManifestPath.set(componentName, manifestPath);
+    }
+    if (this._addLinkToMap(packageAndComponent, manifestPath)) {
+      this._nonNormalizedLinksResolved++;
+    }
     if (NORMALIZE_WORD_SEPARATORS) {
       const normalizedPackageAndComponent = _normalize(packageAndComponent);
       if (normalizedPackageAndComponent !== packageAndComponent) {
-        this._addLinkToMap(normalizedPackageAndComponent, manifestUri);
+        const normalizedComponentName = _normalize(componentName);
+        if (normalizedComponentName !== componentName) {
+          if (_normalize(manifestPath).indexOf(`/${normalizedComponentName}.cm`) >= 0) {
+            this._componentToSomeManifestPath.set(normalizedComponentName, manifestPath);
+          }
+        }
+        this._addLinkToMap(normalizedPackageAndComponent, manifestPath);
       }
     }
   }
 
-  private _addLinkToMap(packageAndComponent: string, manifestUri: vscode.Uri) {
-    this._packageAndComponentToManifestUri.set(packageAndComponent, manifestUri);
-    this._sourcePathToPackageAndComponent.set(manifestUri.fsPath, packageAndComponent);
+  private _addLinkToMap(packageAndComponent: string, manifestPath: string): boolean {
+    let linkWasAdded = false;
+    if (!this._packageAndComponentToManifestUri.get(packageAndComponent)) {
+      linkWasAdded = true;
+      const manifestUri = this._baseUri.with({ path: `${this._baseUri.path}/${manifestPath}` });
+      this._packageAndComponentToManifestUri.set(packageAndComponent, manifestUri);
+    }
+    let packageAndComponents = this._sourcePathToPackageAndComponents.get(manifestPath);
+    if (!packageAndComponents) {
+      packageAndComponents = [];
+      this._sourcePathToPackageAndComponents.set(manifestPath, packageAndComponents);
+    }
+    packageAndComponents.push(packageAndComponent);
+    return linkWasAdded;
   }
 
   addReference(
@@ -808,7 +972,11 @@ export class Provider implements
     }
   }
 
-  private _addReferenceToMap(packageAndComponent: string, referencedByUri: vscode.Uri, range: vscode.Range) {
+  private _addReferenceToMap(
+    packageAndComponent: string,
+    referencedByUri: vscode.Uri,
+    range: vscode.Range,
+  ) {
     let references = this._packageAndComponentToReferences.get(packageAndComponent);
     if (!references) {
       references = [];
