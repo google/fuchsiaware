@@ -1,6 +1,10 @@
 # FuchsiAware
 ## Fuchsia Source Tree Browsing Assistance
 
+[![vscode-marketplace](https://img.shields.io/vscode-marketplace/d/RichKadel.fuchsiaware.svg)](https://marketplace.visualstudio.com/items?itemName=RichKadel.fuchsiaware)
+[![license](https://img.shields.io/badge/license-Apache2.0-blue.svg)](https://github.com/google/fuchsiaware/blob/main/LICENSE)
+[![Build Status](https://dev.azure.com/vscode-fuchsiaware/FuchsiAware/_apis/build/status/google.fuchsiaware?branchName=main)](https://dev.azure.com/vscode-fuchsiaware/FuchsiAware/_build/latest?definitionId=1&branchName=main)
+
 This extension provides additional support to developers working with the source code for the
 open source [Fuchsia](https://fuchsia.dev) operating system.
 
