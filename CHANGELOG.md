@@ -43,3 +43,14 @@ All notable changes to the "fuchsiaware" extension will be documented in this fi
 - New feature: Linkifies fxrev.dev and fxbug.dev links
   * Activates `fxrev.dev/[revision ID]` (and legacy `fxr/[revision ID]`) links
   * Activates `fxbug.dev/[bug ID]` (and legacy `fxb/[bug ID]`) links
+
+## [0.3.0]
+
+- Fixes:
+  * Added more patterns and heuristics to resolve more component URLs to their manifests.
+    (Heuristics can be turned off in "Settings", if desired.) This release applies a best effort
+    match of otherwise unresolved component URL links to manifests with matching component names.
+    Since the same component can be in more than one package, this will not always be valid, but
+    for most users that would have to search manually, this seems to be more helpful. In addition,
+    to searching based on matching names, matches are also attempted after removing some common
+    built-time-appended suffixes (such as "_test").
