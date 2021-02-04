@@ -23,13 +23,13 @@ suite('Extension Test Suite', () => {
   const baseUri = vscode.Uri.file('fuchsia');
   const buildDir = 'out/default.test';
 
-  // TODO(richkadel): Replace these hardcoded copies of specific lines from the `toolchain.ninja`
+  // TODO(#4): Replace these hardcoded copies of specific lines from the `toolchain.ninja`
   // file with a cached but quickly refreshed copy of the developer's most current `toolchain.ninja`
   // (at least the subset of lines relevant to this extension). Each 'line' value below can then
   // be replaced with a regex to pull the specific required line from the cached and current data.
   // This way the test can validate that the expected format has not changed.
 
-  // TODO(richkadel): Add an integration test that loops throught all extracted packageAndComponent
+  // TODO(#5): Add an integration test that loops throught all extracted packageAndComponent
   // pairs, formats them into 'fuchsia-pkg://...' URLs, gets the manifest URIs from
   // provideDocumentLinks(), and validates the files exist. Generate stats for the number of
   // valid and invalid links.

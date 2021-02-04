@@ -93,7 +93,7 @@ export class Provider implements
           );
         }
       }
-      // TODO(richkadel): Clean up and expand on these reported stats
+      // TODO(#1): Clean up and expand on these reported stats
       log.debug(`Link Resolution Statistics`);
       log.debug(`==========================`);
       log.debug(`unresolved links = ${totalUnresolvedLinks}`);
@@ -356,7 +356,7 @@ export class Provider implements
     return true;
   }
 
-  // TODO(richkadel): These patterns are very fragile and subject to breakage when GN rules change.
+  // TODO(#2): These patterns are very fragile and subject to breakage when GN rules change.
   // Plus, since they only search the results from `fx set`, the results are limited to the packages
   // in the current set of dependencies (which isn't terrible, but not great for general browsing,
   // or to find a dependency.) Alternative 1: Find a better way to query the dependencies.
@@ -762,7 +762,7 @@ export class Provider implements
     return true;
   }
 
-  // TODO(richkadel): find links to fuchsia Service declarations in .fidl files using (I suggest)
+  // TODO(#3): find links to fuchsia Service declarations in .fidl files using (I suggest)
   // a `git` command (since we know this works) equivalent of:
   //   $ find ${this._baseUri}/${buildDir} -name '*fidl.json'
   //
@@ -785,7 +785,7 @@ export class Provider implements
   //   }
   //
   // And use that information to add additional service links via the provideDocumentLinks()
-  // meethod:
+  // method.
 
   private static _findLinksOredRegEx = new RegExp(
     '(?:(?:' +
