@@ -54,3 +54,11 @@ All notable changes to the "fuchsiaware" extension will be documented in this fi
     for most users that would have to search manually, this seems to be more helpful. In addition,
     to searching based on matching names, matches are also attempted after removing some common
     built-time-appended suffixes (such as "_test").
+
+## [0.4.0]
+
+- Fixes:
+  * A recent change to `fx set` appears to now populate `.fx-build-dir` with an absolute path name.
+    This version supports an absolute path name, as long as it is a descendent directory of
+    `$FUCHSIA_DIR`. This should resolve errors related to the recent change. If support for absolute
+    paths external to `$FUCHSIA_DIR` is also necessary, additional changes will be required.
