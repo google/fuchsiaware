@@ -101,7 +101,8 @@ async function _readBuildDirDoc(
     const buildDirDoc = await vscode.workspace.openTextDocument(buildDirFileUri);
     let buildDir = buildDirDoc.getText().trim();
     // buildDir can be an absolute path; make it relative to folderUri.fsPath.
-    if (buildDir.startsWith(`${folderUri.fsPath}/`) {
+    if (buildDir.startsWith(`${folderUri.fsPath}/`)) {
+
         buildDir = buildDir.substring(folderUri.fsPath.length + 1);
     }
     log.info(
