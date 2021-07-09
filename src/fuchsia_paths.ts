@@ -99,7 +99,12 @@ async function _readBuildDirDoc(
   const buildDirFileUri = folderUri.with({ path: `${folderUri.path}/${buildDirFilename}` });
   try {
     const buildDirDoc = await vscode.workspace.openTextDocument(buildDirFileUri);
-    const buildDir = buildDirDoc.getText().trim();
+    let buildDir = buildDirDoc.getText().trim();
+    // buildDir can be an absolute path; make it relative to folderUri.fsPath.
+    if (buildDir.startsWith(`${folderUri.fsPath}/`)) {
+
+        buildDir = buildDir.substring(folderUri.fsPath.length + 1);
+    }
     log.info(
       `Folder '${folderUri.fsPath}' contains the '${buildDirFilename}' file, ` +
       `which specifies that the current Fuchsia build directory is '${buildDir}'`
