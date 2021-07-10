@@ -22,6 +22,21 @@ use GitHub pull requests for this purpose. Consult
 [GitHub Help](https://help.github.com/articles/about-pull-requests/) for more
 information on using pull requests.
 
+## Test Code Changes (Before Review)
+
+If you are contributing a code change, please run the existing tests. Strongly
+consider adding a test for your specific change.
+
+You can run the tests using the command:
+
+```shell
+$ npm run test
+```
+
+Additional information on the testing framework and commands is available in the
+VS Code documentation for
+[Testing Extensions](https://code.visualstudio.com/api/working-with-extensions/testing-extension).
+
 ## Community Guidelines
 
 This project follows [Google's Open Source Community
