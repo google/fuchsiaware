@@ -69,7 +69,7 @@ if not already present.)
 
    ```shell
    $ vsce package
-   $ vsce publish <patch or minor or simply $NEW_VERSION>
+   $ vsce publish <patch or minor or simply $NEW_VERSION> --githubBranch=main
    ```
 
    This should update the version in `package.json` and `package-lock.json`, and
