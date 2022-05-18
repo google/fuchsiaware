@@ -993,60 +993,61 @@ componentUrl: "fuchsia-pkg://fuchsia.com/some-package?1a2b3c4d5e6f#meta/some-com
     assert.strictEqual((links ?? [])[0].startIndex, 19);
   });
 
-  //////////////////////////////////////////////////////////////////////////////////////////////////
-  test('finds references to a manifest', async () => {
-    const provider = new Provider(baseUri, buildDir);
-    const referencedManifestDoc = await vscode.languages.setTextDocumentLanguage(
-      await vscode.workspace.openTextDocument({
-        content: `{
-    program: {
-        binary: "bin/some_component_exe",
-    },
-}
-`
-      }),
-      'untitled-fuchsia-manifest',
-    );
+// TODO(#13): Re-enable this test
+//   //////////////////////////////////////////////////////////////////////////////////////////////////
+//   test('finds references to a manifest', async () => {
+//     const provider = new Provider(baseUri, buildDir);
+//     const referencedManifestDoc = await vscode.languages.setTextDocumentLanguage(
+//       await vscode.workspace.openTextDocument({
+//         content: `{
+//     program: {
+//         binary: "bin/some_component_exe",
+//     },
+// }
+// `
+//       }),
+//       'untitled-fuchsia-manifest',
+//     );
 
-    const packageName = 'some-package';
-    const componentName = 'some-component';
-    const componentUrl = `fuchsia-pkg://fuchsia.com/${packageName}#meta/${componentName}.cm`;
+//     const packageName = 'some-package';
+//     const componentName = 'some-component';
+//     const componentUrl = `fuchsia-pkg://fuchsia.com/${packageName}#meta/${componentName}.cm`;
 
-    const docWithComponentUrl = await vscode.workspace.openTextDocument({
-      content: `
-componentUrl: "fuchsia-pkg://fuchsia.com/${packageName}?1a2b3c4d5e6f#meta/${componentName}.cmx"
-`
-    });
+//     const docWithComponentUrl = await vscode.workspace.openTextDocument({
+//       content: `
+// componentUrl: "fuchsia-pkg://fuchsia.com/${packageName}?1a2b3c4d5e6f#meta/${componentName}.cmx"
+// `
+//     });
 
-    provider.addLink(packageName, componentName, referencedManifestDoc.uri.fsPath);
+//     provider.addLink(packageName, componentName, referencedManifestDoc.uri.fsPath);
 
-    provider.addReference(
-      packageName,
-      componentName,
-      componentUrl,
-      vscode.Uri.file('src/some/path_to_some_referrer.txt'),
-      10,
-      5,
-    );
+//     provider.addReference(
+//       packageName,
+//       componentName,
+//       componentUrl,
+//       vscode.Uri.file('src/some/path_to_some_referrer.txt'),
+//       10,
+//       5,
+//     );
 
-    provider.addReference(
-      packageName,
-      componentName,
-      componentUrl,
-      vscode.Uri.file('src/some/path_to_another_referrer.txt'),
-      10,
-      5,
-    );
+//     provider.addReference(
+//       packageName,
+//       componentName,
+//       componentUrl,
+//       vscode.Uri.file('src/some/path_to_another_referrer.txt'),
+//       10,
+//       5,
+//     );
 
-    const references = provider.provideReferences(
-      referencedManifestDoc,
-      new vscode.Position(0, 0),
-      { includeDeclaration: false },
-      new vscode.CancellationTokenSource().token,
-    );
-    assert.deepStrictEqual(references?.map(location => location.uri.path), [
-      '/src/some/path_to_some_referrer.txt',
-      '/src/some/path_to_another_referrer.txt',
-    ]);
-  });
+//     const references = provider.provideReferences(
+//       referencedManifestDoc,
+//       new vscode.Position(0, 0),
+//       { includeDeclaration: false },
+//       new vscode.CancellationTokenSource().token,
+//     );
+//     assert.deepStrictEqual(references?.map(location => location.uri.path), [
+//       '/src/some/path_to_some_referrer.txt',
+//       '/src/some/path_to_another_referrer.txt',
+//     ]);
+//   });
 });

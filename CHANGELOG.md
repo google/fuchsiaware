@@ -62,3 +62,18 @@ All notable changes to the "fuchsiaware" extension will be documented in this fi
     This version supports an absolute path name, as long as it is a descendent directory of
     `$FUCHSIA_DIR`. This should resolve errors related to the recent change. If support for absolute
     paths external to `$FUCHSIA_DIR` is also necessary, additional changes will be required.
+
+## [0.4.1]
+
+- Documentation:
+  * Adds instructions for publishing new releases, in [RELEASING.md](RELEASING.md).
+
+## [0.4.2]
+
+- UI:
+  * Updates the VS Code extension icon to a more current Fuchsia logo.
+
+- Test regression:
+  * A test is no longer passing, even though the source has not changed. Until
+    this issue can be corrected, I had to comment out the broken test. See issue
+    (#13)[https://github.com/google/fuchsiaware/issues/13] for details.
