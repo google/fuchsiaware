@@ -71,9 +71,22 @@ All notable changes to the "fuchsiaware" extension will be documented in this fi
 ## [0.4.2]
 
 - UI:
-  * Updates the VS Code extension icon to a more current Fuchsia logo.
+  * Updates the VS Code extension icon to a more current Fuchsia logo. (Note:
+    the version of the logo image in this release did not work well with dark
+    themes, and had to be fixed in version 0.4.3.)
 
 - Test regression:
   * A test is no longer passing, even though the source has not changed. Until
     this issue can be corrected, I had to comment out the broken test. See issue
     (#13)[https://github.com/google/fuchsiaware/issues/13] for details.
+
+## [0.4.2]
+
+- UI:
+  * Replace the new VS Code extension icon with one that is more visible on top
+    of dark themes in VS Code and web pages.
+
+- Documentation:
+  * Improved steps in the [RELEASING][RELEASING.md] document to ensure the
+    package.json version change is included in the pull request with its
+    corresponding changes.
