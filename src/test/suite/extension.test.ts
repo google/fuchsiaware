@@ -52,7 +52,7 @@ obj/src/devices/tests/libdriver-integration-test/libdriver-integration-test_comp
 gen/src/devices/tests/libdriver-integration-test/libdriver-integration-test_component_cmc_validate_references_fini_file
 --gn-label
 //src/devices/tests/libdriver-integration-test$:libdriver-integration-test_component_cmc_validate_references\(//build/toolchain/fuchsia$:arm64\)
-    `;
+    `.replace(/\n/g, ' ');
 
     const [
       manifestSourcePath, componentName, componentTargetPath
@@ -88,7 +88,7 @@ obj/src/devices/tests/libdriver-integration-test/libdriver-integration-test_mani
 obj/src/devices/tests/libdriver-integration-test/libdriver-integration-test_metadata.stamp
 obj/src/devices/tests/libdriver-integration-test/libdriver-integration-test_test_libdriver-integration-test_component.stamp
 host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
-    `;
+    `.replace(/\n/g, ' ');
 
     const [
       targetBuildDir,
@@ -127,7 +127,7 @@ obj/src/devices/bin/driver_manager/driver-manager-tests_test_driver-manager-test
 obj/src/devices/bin/driver_manager/driver-manager-tests_test_driver-runner-test.stamp
 obj/src/devices/bin/driver_manager/driver-runner-test.stamp
 host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
-    `;
+    `.replace(/\n/g, ' ');
 
     const [
       targetBuildDir,
@@ -165,7 +165,7 @@ obj/src/diagnostics/archivist/tests/archive_path/archive_path_test_archivist.sta
 obj/src/diagnostics/archivist/tests/archive_path/archive_path_validate.stamp
 ./archive_path_test
 host_x64/cmc
-`;
+`.replace(/\n/g, ' ');
 
     const [
       manifestSourcePath,
@@ -204,7 +204,7 @@ validate-references
 gen/src/diagnostics/archivist/tests/archive_path/archive_path_test_archivist_cmc_validate_references_fini_file
 --gn-label
 //src/diagnostics/archivist/tests/archive_path$:archive_path_test_archivist_cmc_validate_references\(//build/toolchain/fuchsia$:arm64\)
-    `;
+    `.replace(/\n/g, ' ');
 
       const [
         manifestSourcePath, componentName, componentTargetPath
@@ -244,7 +244,7 @@ obj/src/diagnostics/archivist/tests/feedback_reader/feedback_reader.stamp
 obj/src/diagnostics/archivist/tests/logs/cpp/cpp.stamp
 obj/src/diagnostics/archivist/tests/unified_reader/unified_reader.stamp
 host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
-    `;
+    `.replace(/\n/g, ' ');
 
     const [
       targetBuildDir,
@@ -280,7 +280,7 @@ obj/src/session/bin/session_manager/session_manager_component.stamp
 obj/src/session/bin/session_manager/session_manager_manifest.stamp
 obj/src/session/bin/session_manager/session_manager_metadata.stamp
 host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
-    `;
+    `.replace(/\n/g, ' ');
 
     const [
       targetBuildDir, packageTarget, componentTargets,
@@ -335,7 +335,7 @@ obj/src/ui/bin/ime/keyboard_test_validate_manifests_ime_service.cmx.stamp
 obj/src/ui/bin/ime/keyboard_test_validate_manifests_ime_service_integration_test.cmx.stamp
 obj/src/ui/bin/ime/keyboard_test_validate_manifests_keyboard3_integration_test.cmx.stamp
 obj/src/ui/bin/ime/keyboard_test_validate_manifests_keyboard_test_bin.cmx.stamp
-    `;
+    `.replace(/\n/g, ' ');
 
     const [
       targetBuildDir, packageTarget, componentTargets,
@@ -372,7 +372,7 @@ validate-references
 gen/examples/diagnostics/inspect/codelab/cpp/part_1/tests/inspect_cpp_codelab_part_1_integration_test_cmc_validate_references_fini_file
 --gn-label
 //examples/diagnostics/inspect/codelab/cpp/part_1/tests$:inspect_cpp_codelab_part_1_integration_test_cmc_validate_references\(//build/toolchain/fuchsia$:arm64\)
-    `;
+    `.replace(/\n/g, ' ');
 
     const [
       manifestSourcePath, componentName, componentTargetPath
@@ -389,37 +389,57 @@ gen/examples/diagnostics/inspect/codelab/cpp/part_1/tests/inspect_cpp_codelab_pa
   });
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
-  test('archivist_integration_tests_v2_extractPackage', () => {
+  test('archivist_integration_tests_extractPackage', () => {
     const line = `
-command
-=
-/usr/bin/env
-../../build/gn_run_binary.sh
-../../prebuilt/third_party/clang/linux-x64/bin
-host_x64/pm
--o
-obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2
--m
-obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2.manifest
--n
-archivist-integration-tests-v2
--version
-0
 build
--output-package-manifest
-obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2/package_manifest.json
--depfile
--blobsfile
--blobs-manifest
-    `;
+obj/src/diagnostics/archivist/tests/integration/archivist-integration-tests/meta.far
+obj/src/diagnostics/archivist/tests/integration/archivist-integration-tests/meta.far.merkle
+obj/src/diagnostics/archivist/tests/integration/archivist-integration-tests/blobs.json
+obj/src/diagnostics/archivist/tests/integration/archivist-integration-tests/blobs.manifest
+obj/src/diagnostics/archivist/tests/integration/archivist-integration-tests/package_manifest.json:
+__src_diagnostics_archivist_tests_integration_archivist-integration-tests.pm___build_toolchain_fuchsia_x64__rule
+|
+../../build/rbe/output-scanner.sh
+obj/src/diagnostics/archivist/tests/integration/archivist-integration-tests_manifest
+host_x64/package-tool
+../../build/gn_run_binary.sh
+obj/src/diagnostics/archivist/tests/integration/archivist-for-integration.stamp
+obj/src/diagnostics/archivist/tests/integration/archivist-for-integration-config.stamp
+obj/src/diagnostics/archivist/tests/integration/archivist-for-integration-for-v1.stamp
+obj/src/diagnostics/archivist/tests/integration/archivist-for-v1-config.stamp
+obj/src/diagnostics/archivist/tests/integration/archivist-integration-tests.pm_metadata.stamp
+obj/src/diagnostics/archivist/tests/integration/archivist-integration-tests.verify.stamp
+obj/src/diagnostics/archivist/tests/integration/archivist-integration-tests_manifest.stamp
+obj/src/diagnostics/archivist/tests/integration/archivist-integration-tests_test_archivist_integration_tests.stamp
+obj/src/diagnostics/archivist/tests/integration/archivist-with-feedback-filtering.stamp
+obj/src/diagnostics/archivist/tests/integration/archivist-with-feedback-filtering-config.stamp
+obj/src/diagnostics/archivist/tests/integration/archivist-with-feedback-filtering-disabled.stamp
+obj/src/diagnostics/archivist/tests/integration/archivist-with-feedback-filtering-disabled-config.stamp
+obj/src/diagnostics/archivist/tests/integration/archivist-with-klog.stamp
+obj/src/diagnostics/archivist/tests/integration/archivist-with-klog-config.stamp
+obj/src/diagnostics/archivist/tests/integration/archivist-with-legacy-metrics-filtering.stamp
+obj/src/diagnostics/archivist/tests/integration/archivist-with-legacy-metrics-filtering-config.stamp
+obj/src/diagnostics/archivist/tests/integration/archivist-with-lowpan-filtering.stamp
+obj/src/diagnostics/archivist/tests/integration/archivist-with-lowpan-filtering-config.stamp
+obj/src/diagnostics/archivist/tests/integration/archivist-with-small-caches.stamp
+obj/src/diagnostics/archivist/tests/integration/archivist-with-small-caches-config.stamp
+obj/src/diagnostics/archivist/tests/integration/archivist_integration_tests.stamp
+obj/src/diagnostics/archivist/tests/integration/configure_legacy_metrics_pipeline.stamp
+obj/src/diagnostics/archivist/tests/integration/do_not_filter_feedback.stamp
+obj/src/diagnostics/archivist/tests/integration/filter_feedback.stamp
+obj/src/diagnostics/archivist/tests/integration/filter_lowpan.stamp
+obj/src/diagnostics/archivist/tests/integration/components/components.stamp
+obj/src/diagnostics/iquery/test/test_component/test_component.stamp
+host_x64/obj/src/sys/pkg/bin/package-tool/package-tool.stamp
+    `.replace(/\n/g, ' ');
 
     const [
       packageName, packageTargetPath
     ] = Provider.extractPackage(line) ?? [];
-    assert.strictEqual(packageName, 'archivist-integration-tests-v2');
+    assert.strictEqual(packageName, 'archivist-for-integration');
     assert.strictEqual(
       packageTargetPath,
-      'src/diagnostics/archivist/tests/v2:archivist-integration-tests-v2'
+      'src/diagnostics/archivist/tests/integration:archivist-integration-tests'
     );
   });
 
@@ -441,7 +461,7 @@ validate-references
 obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2.manifest
 --gn-label
 //src/diagnostics/archivist/tests/v2$:archivist-integration-tests-v2\(//build/toolchain/fuchsia$:arm64\)
-    `;
+    `.replace(/\n/g, ' ');
 
     const [
       manifestSourcePath, componentName, componentTargetPath
@@ -472,7 +492,7 @@ validate-references
 obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2.manifest
 --gn-label
 //src/diagnostics/archivist/tests/v2$:archivist-integration-tests-v2\(//build/toolchain/fuchsia$:arm64\)
-    `;
+    `.replace(/\n/g, ' ');
 
     const [
       manifestSourcePath, componentName, componentTargetPath
@@ -499,7 +519,7 @@ obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2_archivist_
 ../../
 --depfile
 obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2_archivist_integration_tests.cm.d
-    `;
+    `.replace(/\n/g, ' ');
 
     const [
       manifestSourcePath, componentName, componentTargetPath
@@ -548,7 +568,7 @@ obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2_validate_m
 ./archivist_integration_tests
 ./stub_inspect_component
 host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
-    `;
+    `.replace(/\n/g, ' ');
 
     const [
       targetBuildDir, packageTarget, componentTargets,
@@ -582,7 +602,7 @@ validate-references
 obj/src/fonts/pkg.manifest
 --gn-label
 //src/fonts$:pkg\(//build/toolchain/fuchsia$:arm64\)
-    `;
+    `.replace(/\n/g, ' ');
 
     const [
       manifestSourcePath, componentName, componentTargetPath
@@ -611,7 +631,7 @@ host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
 obj/src/sys/test_runners/gotests/go-test-runner_manifest.stamp
 obj/src/sys/test_runners/gotests/go-test-runner_metadata.stamp
 obj/src/sys/test_runners/gotests/go_test_runner.stamp
-    `;
+    `.replace(/\n/g, ' ');
 
     const [
       targetBuildDir, packageTarget, componentTargets,
@@ -640,7 +660,7 @@ host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
 obj/src/sys/test_runners/elf/elf-test-runner-component.stamp
 obj/src/sys/test_runners/elf/elf-test-runner_manifest.stamp
 obj/src/sys/test_runners/elf/elf-test-runner_metadata.stamp
-    `;
+    `.replace(/\n/g, ' ');
 
     const [
       targetBuildDir, packageTarget, componentTargets,
@@ -677,7 +697,7 @@ obj/src/sys/component_manager/component-manager-tests_test_component-manager-tes
 obj/src/sys/component_manager/component_manager_tests_invalid_manifest.stamp
 ./run_indefinitely
 host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
-    `;
+    `.replace(/\n/g, ' ');
 
     const [
       targetBuildDir, packageTarget, componentTargets,
@@ -731,7 +751,7 @@ obj/src/ui/scenic/scenic_pkg_scenic.cmx.stamp
 obj/src/ui/scenic/scenic_pkg_scenic.cmx_component_index.stamp
 obj/src/ui/scenic/scenic_pkg_validate_manifests_scenic.cmx.stamp
 ./scenic
-    `;
+    `.replace(/\n/g, ' ');
 
     const [
       targetBuildDir, packageTarget, componentTargets,
@@ -771,7 +791,7 @@ obj/src/fonts/pkg_validate_manifests_fonts.cm.stamp
 obj/src/fonts/pkg_validate_manifests_fonts.cmx.stamp
 obj/src/fonts/pkg_validate_manifests_fonts_for_downstream_tests.cmx.stamp
 host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
-    `;
+    `.replace(/\n/g, ' ');
 
     const [
       targetBuildDir, packageTarget, componentTargets,
@@ -802,7 +822,7 @@ obj/src/fonts/pkg_fonts.cm
 ../../
 --depfile
 obj/src/fonts/pkg_fonts.cm.d
-    `;
+    `.replace(/\n/g, ' ');
 
     const [
       manifestSourcePath, componentName, componentTargetPath
@@ -830,7 +850,7 @@ validate-references
 obj/src/ui/scenic/scenic_pkg.manifest
 --gn-label
 //src/ui/scenic$:scenic_pkg\(//build/toolchain/fuchsia$:arm64\)
-    `;
+    `.replace(/\n/g, ' ');
 
     const [
       manifestSourcePath, componentName, componentTargetPath
@@ -857,7 +877,7 @@ obj/src/sys/test_runners/elf/elf-test-runner.cm
 ../../
 --depfile
 obj/src/sys/test_runners/elf/elf-test-runner-component.d
-    `;
+    `.replace(/\n/g, ' ');
 
     const [
       manifestSourcePath, componentName, componentTargetPath
@@ -885,7 +905,7 @@ validate-references
 gen/src/sys/component_manager/component-manager-boot-env-tests-cmp_cmc_validate_references_fini_file
 --gn-label
 //src/sys/component_manager$:component-manager-boot-env-tests-cmp_cmc_validate_references\(//build/toolchain/fuchsia$:arm64\)
-    `;
+    `.replace(/\n/g, ' ');
 
     const [
       manifestSourcePath, componentName, componentTargetPath
@@ -904,32 +924,35 @@ gen/src/sys/component_manager/component-manager-boot-env-tests-cmp_cmc_validate_
   //////////////////////////////////////////////////////////////////////////////////////////////////
   test('extractPackage', () => {
     const line = `
-command
-=
-/usr/bin/env
-../../build/gn_run_binary.sh
-../../prebuilt/third_party/clang/mac-x64/bin
-host_x64/pm
--o
-obj/src/sys/test_manager/test_manager_pkg
--m
-obj/src/sys/test_manager/test_manager_pkg_manifest
--n
-test_manager
--version
-0
 build
--output-package-manifest
-obj/src/sys/test_manager/test_manager_pkg/package_manifest.json
--depfile
--blobsfile
--blobs-manifest
-    `;
+obj/src/sys/test_manager/test_manager_pkg/meta.far
+obj/src/sys/test_manager/test_manager_pkg/meta.far.merkle
+obj/src/sys/test_manager/test_manager_pkg/blobs.json
+obj/src/sys/test_manager/test_manager_pkg/blobs.manifest
+obj/src/sys/test_manager/test_manager_pkg/package_manifest.json:
+__src_sys_test_manager_test_manager_pkg.pm___build_toolchain_fuchsia_x64__rule
+|
+../../build/rbe/output-scanner.sh
+obj/src/sys/test_manager/test_manager_pkg_manifest
+host_x64/package-tool
+../../build/gn_run_binary.sh
+obj/src/diagnostics/archivist/archivist-for-embedding-v2.stamp
+obj/src/storage/memfs/memfs_component.stamp
+obj/src/sys/early_boot_instrumentation/early-boot-instrumentation.stamp
+host_x64/obj/src/sys/pkg/bin/package-tool/package-tool.stamp
+obj/src/sys/test_manager/test_manager_cmp.stamp
+obj/src/sys/test_manager/test_manager_pkg.pm_metadata.stamp
+obj/src/sys/test_manager/test_manager_pkg.verify.stamp
+obj/src/sys/test_manager/test_manager_pkg_manifest.stamp
+obj/src/sys/test_manager/cmx_runner/cmx_runner.stamp
+obj/src/sys/test_manager/debug_data/debug_data_rust.stamp
+obj/src/sys/test_manager/debug_data_processor/debug_data_processor.stamp
+    `.replace(/\n/g, ' ');
 
     const [
       packageName, packageTargetPath
     ] = Provider.extractPackage(line) ?? [];
-    assert.strictEqual(packageName, 'test_manager');
+    assert.strictEqual(packageName, 'archivist-for-embedding-v2');
     assert.strictEqual(packageTargetPath, 'src/sys/test_manager:test_manager_pkg');
   });
 

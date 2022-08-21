@@ -1,103 +1,109 @@
 {
-    "name": "fuchsiaware",
-    "displayName": "FuchsiAware",
-    "description": "Assist browsing Fuchsia artifacts, such as by linking from component URLs to component manifests.",
-    "version": "0.4.3",
-    "publisher": "RichKadel",
-    "license": "Apache-2.0",
-    "engines": {
-        "vscode": "^1.48.0"
-    },
-    "categories": [
-        "Other"
-    ],
-    "repository": {
-        "url": "https://github.com/google/fuchsiaware"
-    },
-    "activationEvents": [
-        "onStartupFinished"
-    ],
-    "main": "./out/extension.js",
-    "icon": "images/fuchsia-logo-256x256.png",
-    "contributes": {
-        "configuration": {
-            "title": "FuchsiAware",
-            "properties": {
-                "fuchsiAware.fuchsia.rootDirectory": {
-                    "scope": "window",
-                    "type": "string",
-                    "default": "",
-                    "description": "Path to the root directory of the fuchsia.git source code. (Defaults to the workspace folder rooted at a fuchsia.git clone, or environment variable $FUCHSIA_DIR or $FUCHSIA_ROOT.)"
-                },
-                "fuchsiAware.showUnresolvedTerminalLinks": {
-                    "scope": "window",
-                    "type": "boolean",
-                    "default": false,
-                    "description": "Highlights every 'fuchsia.pkg://...' component URL, even if the associated component manifest is unknown. (The link tooltip will denote resolved versus unknown manifests, before clicking.)"
-                },
-                "fuchsiAware.normalizeWordSeparators": {
-                    "scope": "window",
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Ignores differences between dashes and underscores comparing URLs. This can help resolve additional links to manifests, but in rare cases may link a component URL to the wrong manifest."
-                },
-                "fuchsiAware.useHeuristicsToFindMoreLinks": {
-                    "scope": "window",
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Applies additional patterns to match component URLs to manifests that are based on common patterns, but not easily validated. This can help resolve additional links, but may link a component URL to the wrong manifest."
-                },
-                "fuchsiAware.debug": {
-                    "scope": "window",
-                    "type": "boolean",
-                    "default": false,
-                    "description": "Enable logging of additional debugging messages"
-                }
-            }
-        },
-        "languages": [
-            {
-                "id": "untitled-fuchsia-manifest",
-                "extensions": [
-                    ".untitled_fuchsia_manifest"
-                ]
-            },
-            {
-                "id": "json",
-                "extensions": [
-                    ".cmx"
-                ]
-            },
-            {
-                "id": "json5",
-                "extensions": [
-                    ".cml"
-                ]
-            }
-        ]
-    },
-    "scripts": {
-        "vscode:prepublish": "npm run compile",
-        "compile": "tsc -p ./",
-        "watch": "tsc -watch -p ./",
-        "pretest": "npm run compile && npm run lint",
-        "lint": "eslint src --ext ts",
-        "test": "node ./out/test/runTest.js"
-    },
-    "devDependencies": {
-        "@types/vscode": "^1.48.0",
-        "@types/glob": "^7.1.3",
-        "@types/mocha": "^8.0.4",
-        "@types/node": "^12.11.7",
-        "eslint": "^7.15.0",
-        "@typescript-eslint/eslint-plugin": "^4.9.0",
-        "@typescript-eslint/parser": "^4.9.0",
-        "glob": "^7.1.6",
-        "mocha": "^8.1.3",
-        "typescript": "^4.1.2",
-        "vscode-test": "^1.4.1"
-    },
-    "extensionDependencies": [
-        "mrmlnc.vscode-json5"
-    ]
+	"name": "fuchsiaware",
+	"displayName": "FuchsiAware",
+	"description": "Assist browsing Fuchsia artifacts, such as by linking from component URLs to component manifests.",
+	"version": "0.5.0",
+	"publisher": "RichKadel",
+	"license": "Apache-2.0",
+	"engines": {
+		"vscode": "^1.48.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"repository": {
+		"url": "https://github.com/google/fuchsiaware"
+	},
+	"activationEvents": [
+		"onStartupFinished"
+	],
+	"main": "./out/extension.js",
+	"icon": "images/fuchsia-logo-256x256.png",
+	"contributes": {
+		"configuration": {
+			"title": "FuchsiAware",
+			"properties": {
+				"fuchsiAware.fuchsia.rootDirectory": {
+					"scope": "window",
+					"type": "string",
+					"default": "",
+					"description": "Path to the root directory of the fuchsia.git source code. (Defaults to the workspace folder rooted at a fuchsia.git clone, or environment variable $FUCHSIA_DIR or $FUCHSIA_ROOT.)"
+				},
+				"fuchsiAware.showUnresolvedTerminalLinks": {
+					"scope": "window",
+					"type": "boolean",
+					"default": false,
+					"description": "Highlights every 'fuchsia.pkg://...' component URL, even if the associated component manifest is unknown. (The link tooltip will denote resolved versus unknown manifests, before clicking.)"
+				},
+				"fuchsiAware.normalizeWordSeparators": {
+					"scope": "window",
+					"type": "boolean",
+					"default": true,
+					"description": "Ignores differences between dashes and underscores comparing URLs. This can help resolve additional links to manifests, but in rare cases may link a component URL to the wrong manifest."
+				},
+				"fuchsiAware.useHeuristicsToFindMoreLinks": {
+					"scope": "window",
+					"type": "boolean",
+					"default": true,
+					"description": "Applies additional patterns to match component URLs to manifests that are based on common patterns, but not easily validated. This can help resolve additional links, but may link a component URL to the wrong manifest."
+				},
+				"fuchsiAware.debug": {
+					"scope": "window",
+					"type": "boolean",
+					"default": false,
+					"description": "Enable logging of additional debugging messages"
+				}
+			}
+		},
+		"languages": [
+			{
+				"id": "untitled-fuchsia-manifest",
+				"extensions": [
+					".untitled_fuchsia_manifest"
+				]
+			},
+			{
+				"id": "json",
+				"extensions": [
+					".cmx"
+				]
+			},
+			{
+				"id": "json5",
+				"extensions": [
+					".cml"
+				]
+			}
+		]
+	},
+	"scripts": {
+		"vscode:prepublish": "npm run compile",
+		"compile": "tsc -p ./",
+		"watch": "tsc -watch -p ./",
+		"pretest": "npm run compile && npm run lint",
+		"lint": "eslint src --ext ts",
+		"test": "node ./out/test/runTest.js"
+	},
+	"devDependencies": {
+		"@types/glob": "^7.1.3",
+		"@types/mocha": "^8.0.4",
+		"@types/node": "^12.11.7",
+		"@types/vscode": "^1.48.0",
+		"@typescript-eslint/eslint-plugin": "^4.9.0",
+		"@typescript-eslint/parser": "^4.9.0",
+		"eslint": "^7.15.0",
+		"glob": "^7.1.6",
+		"mocha": "^8.1.3",
+		"typescript": "^4.7.4",
+		"vscode-test": "^1.4.1"
+	},
+	"extensionDependencies": [
+		"mrmlnc.vscode-json5"
+	],
+	"__metadata": {
+		"id": "8bf964d9-8f48-43d9-9ff4-6c4fc4800306",
+		"publisherDisplayName": "Rich Kadel",
+		"publisherId": "d8353dbb-970b-403e-a42c-0b6af1a4ac1e",
+		"isPreReleaseVersion": false
+	}
 }
