@@ -90,3 +90,12 @@ All notable changes to the "fuchsiaware" extension will be documented in this fi
   * Improved steps in the [RELEASING][RELEASING.md] document to ensure the
     package.json version change is included in the pull request with its
     corresponding changes.
+
+## [0.5.0]
+
+- Fixes:
+  * Updated the regular expression for extracting packages, and updated tests to
+    match the revised ninja build command to build packages. The commands for
+    building packages recently changed, and the packages could not be extracted.
+    This generated a VS Code error dialog when loading FuchsiAware, and
+    FuchsiAware was not able to generate some cross-references.

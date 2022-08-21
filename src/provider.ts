@@ -258,7 +258,12 @@ export class Provider implements
           componentTargetPath,
           [componentName, manifestPath]
         );
-      } else if ((result = Provider.extractPackage(line))) {
+      }
+
+      // Note that extractBuildDirPackageTargetAndComponents() uses the same
+      // ninja command line used by extractPackage, so this check is not in
+      // the if-else-if condition block.
+      if ((result = Provider.extractPackage(line))) {
         const [packageName, packageTargetPath] = result;
         if (!matchedAtLeastOnePmBuildExample) {
           matchedAtLeastOnePmBuildExample = true;
@@ -587,9 +592,8 @@ export class Provider implements
   }
 
   private static _pmBuildRegEx = new RegExp([
-    /^\s*command\s*=(?:.|\n)*?\/pm/,
-    /\s+-o\s+obj\/(?<targetBuildDir>[^\s]+)\/(?<packageTarget>[^\s]+)\s/,
-    /(?:.|\n)*?-n\s+(?<packageName>[-\w]+)\s/,
+    /^\s*build\s+obj\/(?<targetBuildDir>[^\s]+)\/(?<packageTarget>[^\s/]+)\/meta.far\s+/,
+    /.*package-tool.*\/gn_run_binary.sh\s+[^\s]*\/(?<packageName>[^\s/.]+)\.stamp/
   ].map(r => r.source).join(''));
 
   static extractPackage(line: string): [string, string] | undefined {
