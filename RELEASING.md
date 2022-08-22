@@ -56,11 +56,13 @@ if not already present.)
    [CHANGELOG](CHANGELOG.md). Then push the change to your fork.
 
    ```shell
+   $ git add ...
+   $ git commit [--amend]
    $ git push --set-upstream origin $NEW_VERSION
    ```
 
    Create a pull request, and verify the GitHub checks pass.
-   
+
    DO NOT merge the change yet.
 
 	_Your new version is **not yet published** to the VS Code Marketplace_

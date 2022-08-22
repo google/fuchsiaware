@@ -223,10 +223,7 @@ export class Provider implements
           }
           subComponentTargets.push(subComponentTarget);
         }
-      } else if (
-        (result = Provider.extractManifestPathAndComponentFromCmcValidate(line, this._buildDir)) ||
-        (result = Provider.extractManifestPathAndCmlComponent(line))
-      ) {
+      } else if (result = Provider.extractManifestPathAndCmlComponent(line)) {
         const [manifestPath, componentName, componentTargetPath] = result;
         if (!matchedAtLeastOneManifestAndComponentExample) {
           matchedAtLeastOneManifestAndComponentExample = true;
@@ -288,7 +285,7 @@ export class Provider implements
       log.error(
         `The ninja build file '${ninjaFileUri.fsPath}' did not contain any lines matching the ` +
         `expected pattern to identify components in a 'validate .cmx manifest' command: \n\n` +
-        `  cmcValidateRefsRegEx = ${Provider._cmcValidateRefsRegEx}\n`
+        `  cmcCompileCmlRegEx = ${Provider._cmcCompileCmlRegEx}\n`
       );
       return false;
     } else if (!matchedAtLeastOnePmBuildExample) {
@@ -465,6 +462,12 @@ export class Provider implements
       dependencies,
     ] = match;
 
+    if (manifestPath.startsWith('build/') || manifestPath.endsWith('.cm') ||
+        manifestPath.indexOf('_manifest_compile/') >= 0) {
+      // generated manifest
+      return;
+    }
+
     // Get all dependencies (global search)
     const subComponentTargets = [];
     const depRegEx = new RegExp([
@@ -504,68 +507,11 @@ export class Provider implements
     ];
   }
 
-  private static _cmcValidateRefsRegEx = new RegExp([
-    /^\s*command\s*=(?:.|\n)*?host_\w+\/cmc\s/,
-    // Note: The next regex is optional, and `prefComponentTarget` will be undefined, if
-    // '_validate_manifests_' is not part of the `--stamp` string.
-    /(?:(?:.|\n)*?--stamp\s+[^\s]*?_validate_manifests_(?<destComponentManifest>[-\w.]+?)?\.action\.stamp\b)?/,
-    /(?:.|\n)*?\svalidate-references/,
-    /(?:.|\n)*?--component-manifest\s+(?<pathRoot>(?:\.\.\/\.\.)|(?:obj))\/(?<manifestPath>[^\s]*\/(?<fallbackComponentName>[^/.]+)\.cm[xl]?)/,
-    /(?:.|\n)*?--gn-label\s+\/\/(?<targetBuildDir>[^$]+)\$:/,
-    /(?<fallbackComponentTarget>[-\w]+)?\b/,
-  ].map(r => r.source).join(''));
-
-  static extractManifestPathAndComponentFromCmcValidate(
-    line: string,
-    buildDir: string,
-  ): [string, string, string] | undefined {
-    const match = Provider._cmcValidateRefsRegEx.exec(line);
-    if (!match) {
-      return;
-    }
-
-    const [
-      , // full match
-      destComponentManifest,
-      pathRoot,
-      manifestPath,
-      fallbackComponentName,
-      targetBuildDir,
-      fallbackComponentTarget,
-    ] = match;
-
-    let adjustedManifestPath = manifestPath;
-    if (pathRoot !== '../..') {
-      adjustedManifestPath = `../../${buildDir}/${manifestPath}`;
-    }
-
-    let componentTarget;
-    let componentName;
-    if (destComponentManifest) {
-      componentTarget = destComponentManifest;
-      componentName = componentTarget.replace(/\.cmx?$/, '');
-    } else {
-      componentTarget = fallbackComponentTarget.replace(
-        /_cmc_validate_references$/,
-        '',
-      );
-      componentName = fallbackComponentName;
-    }
-
-    const componentTargetPath = `${targetBuildDir}:${componentTarget}`;
-
-    return [
-      adjustedManifestPath,
-      componentName,
-      componentTargetPath,
-    ];
-  }
-
   private static _cmcCompileCmlRegEx = new RegExp([
-    /^\s*command\s*=(?:.|\n)*?\/cmc\s+compile/,
-    /\s+\.\.\/\.\.\/(?<manifestPath>[^.]+\.cml]?)/,
-    /\s+--output\s+obj\/[^\s]+\/(?<componentName>[^/.]+)\.cm\s/,
-    /(?:.|\n)*--depfile\s+obj\/(?<targetBuildDir>[^\s]+)\/(?<componentTarget>[^/.]+)(?:\.cm)?\.d/,
+    /^\s*command\s*=.*/,
+    /--label\s+\/\/(?<targetBuildDir>[^$]+)\$:(?<componentTarget>[-\w]+)_manifest_compile/,
+    /[^\s]*\s+obj\/[^\s]+\/(?<componentName>[^/.]+)\.cm\s/,
+    /.*\/cmc\s+compile\s+\.\.\/\.\.\/(?<manifestPath>[^\s]+)/,
   ].map(r => r.source).join(''));
 
   static extractManifestPathAndCmlComponent(line: string): [string, string, string] | undefined {
@@ -576,11 +522,17 @@ export class Provider implements
 
     const [
       , // full match
-      manifestPath,
-      componentName,
       targetBuildDir,
       componentTarget,
+      componentName,
+      manifestPath,
     ] = match;
+
+    if (manifestPath.startsWith('build/') || manifestPath.endsWith('.cm') ||
+        manifestPath.indexOf('_manifest_compile/') >= 0) {
+      // generated manifest
+      return;
+    }
 
     const componentTargetPath = `${targetBuildDir}:${componentTarget}`;
 
@@ -593,7 +545,7 @@ export class Provider implements
 
   private static _pmBuildRegEx = new RegExp([
     /^\s*build\s+obj\/(?<targetBuildDir>[^\s]+)\/(?<packageTarget>[^\s/]+)\/meta.far\s+/,
-    /.*package-tool.*\/gn_run_binary.sh\s+[^\s]*\/(?<packageName>[^\s/.]+)\.stamp/
+    /.*package-tool.*\/gn_run_binary.sh\s+[^\s]*\/(?<packageName>[^\s/.]+)\.stamp/,
   ].map(r => r.source).join(''));
 
   static extractPackage(line: string): [string, string] | undefined {

@@ -35,40 +35,6 @@ suite('Extension Test Suite', () => {
   // valid and invalid links.
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
-  test('libdriver_integration_test_extractManifestPathAndComponentFromCmcValidate', () => {
-    const line = `
-command
-=
-/usr/bin/env
-../../build/gn_run_binary.sh
-../../prebuilt/third_party/clang/linux-x64/bin
-host_x64/cmc
---stamp
-gen/src/devices/tests/libdriver-integration-test/libdriver-integration-test_component_cmc_validate_references.action.stamp
-validate-references
---component-manifest
-obj/src/devices/tests/libdriver-integration-test/libdriver-integration-test_component_generated_manifest.cmx
---package-manifest
-gen/src/devices/tests/libdriver-integration-test/libdriver-integration-test_component_cmc_validate_references_fini_file
---gn-label
-//src/devices/tests/libdriver-integration-test$:libdriver-integration-test_component_cmc_validate_references\(//build/toolchain/fuchsia$:arm64\)
-    `.replace(/\n/g, ' ');
-
-    const [
-      manifestSourcePath, componentName, componentTargetPath
-    ] = Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
-    assert.strictEqual(
-      manifestSourcePath,
-      `../../${buildDir}/src/devices/tests/libdriver-integration-test/libdriver-integration-test_component_generated_manifest.cmx`
-    );
-    assert.strictEqual(componentName, 'libdriver-integration-test_component_generated_manifest');
-    assert.strictEqual(
-      componentTargetPath,
-      'src/devices/tests/libdriver-integration-test:libdriver-integration-test_component'
-    );
-  });
-
-  //////////////////////////////////////////////////////////////////////////////////////////////////
   test('libdriver_integration_test_extractBuildDirPackageTargetAndComponents', () => {
     const line = `
 build
@@ -183,43 +149,6 @@ host_x64/cmc
       'archive_path_test_archivist',
     ]);
   });
-
-  //////////////////////////////////////////////////////////////////////////////////////////////////
-  test(
-    'archivist_integration_tests_archive_path_test_extractManifestPathAndComponentFromCmcValidate',
-    () => {
-      const line = `
-command
-=
-/usr/bin/env
-../../build/gn_run_binary.sh
-../../prebuilt/third_party/clang/linux-x64/bin
-host_x64/cmc
---stamp
-gen/src/diagnostics/archivist/tests/archive_path/archive_path_test_archivist_cmc_validate_references.action.stamp
-validate-references
---component-manifest
-../../src/diagnostics/archivist/tests/archive_path/meta/archive_path_test_archivist.cmx
---package-manifest
-gen/src/diagnostics/archivist/tests/archive_path/archive_path_test_archivist_cmc_validate_references_fini_file
---gn-label
-//src/diagnostics/archivist/tests/archive_path$:archive_path_test_archivist_cmc_validate_references\(//build/toolchain/fuchsia$:arm64\)
-    `.replace(/\n/g, ' ');
-
-      const [
-        manifestSourcePath, componentName, componentTargetPath
-      ] = Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
-      assert.strictEqual(
-        manifestSourcePath,
-        'src/diagnostics/archivist/tests/archive_path/meta/archive_path_test_archivist.cmx'
-      );
-      assert.strictEqual(componentName, 'archive_path_test_archivist');
-      assert.strictEqual(
-        componentTargetPath,
-        'src/diagnostics/archivist/tests/archive_path:archive_path_test_archivist'
-      );
-    }
-  );
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
   test('archivist_integration_tests_extractBuildDirPackageTargetAndComponents', () => {
@@ -355,40 +284,6 @@ obj/src/ui/bin/ime/keyboard_test_validate_manifests_keyboard_test_bin.cmx.stamp
   });
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
-  test('inspect_codelab_extractManifestPathAndComponentFromCmcValidate', () => {
-    const line = `
-command
-=
-/usr/bin/env
-../../build/gn_run_binary.sh
-../../prebuilt/third_party/clang/linux-x64/bin
-host_x64/cmc
---stamp
-gen/examples/diagnostics/inspect/codelab/cpp/part_1/tests/inspect_cpp_codelab_part_1_integration_test_cmc_validate_references.action.stamp
-validate-references
---component-manifest
-../../examples/diagnostics/inspect/codelab/cpp/part_1/tests/integration_part_1.cmx
---package-manifest
-gen/examples/diagnostics/inspect/codelab/cpp/part_1/tests/inspect_cpp_codelab_part_1_integration_test_cmc_validate_references_fini_file
---gn-label
-//examples/diagnostics/inspect/codelab/cpp/part_1/tests$:inspect_cpp_codelab_part_1_integration_test_cmc_validate_references\(//build/toolchain/fuchsia$:arm64\)
-    `.replace(/\n/g, ' ');
-
-    const [
-      manifestSourcePath, componentName, componentTargetPath
-    ] = Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
-    assert.strictEqual(
-      manifestSourcePath,
-      'examples/diagnostics/inspect/codelab/cpp/part_1/tests/integration_part_1.cmx'
-    );
-    assert.strictEqual(componentName, 'integration_part_1');
-    assert.strictEqual(
-      componentTargetPath,
-      'examples/diagnostics/inspect/codelab/cpp/part_1/tests:inspect_cpp_codelab_part_1_integration_test'
-    );
-  });
-
-  //////////////////////////////////////////////////////////////////////////////////////////////////
   test('archivist_integration_tests_extractPackage', () => {
     const line = `
 build
@@ -444,81 +339,33 @@ host_x64/obj/src/sys/pkg/bin/package-tool/package-tool.stamp
   });
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
-  test('archivist_integration_tests_v2_archivist_extractManifestPathAndComponentFromCmcValidate', () => {
-    const line = `
-command
-=
-/usr/bin/env
-../../build/gn_run_binary.sh
-../../prebuilt/third_party/clang/linux-x64/bin
-host_x64/cmc
---stamp
-gen/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2_validate_manifests_archivist.cm.action.stamp
-validate-references
---component-manifest
-../../src/diagnostics/archivist/tests/v2/meta/archivist_for_integration.cml
---package-manifest
-obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2.manifest
---gn-label
-//src/diagnostics/archivist/tests/v2$:archivist-integration-tests-v2\(//build/toolchain/fuchsia$:arm64\)
-    `.replace(/\n/g, ' ');
-
-    const [
-      manifestSourcePath, componentName, componentTargetPath
-    ] = Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
-    assert.strictEqual(
-      manifestSourcePath,
-      'src/diagnostics/archivist/tests/v2/meta/archivist_for_integration.cml'
-    );
-    assert.strictEqual(componentName, 'archivist');
-    assert.strictEqual(componentTargetPath, 'src/diagnostics/archivist/tests/v2:archivist.cm');
-  });
-
-  //////////////////////////////////////////////////////////////////////////////////////////////////
-  test('archivist_integration_tests_v2_driver_extractManifestPathAndComponentFromCmcValidate', () => {
-    const line = `
-command
-=
-/usr/bin/env
-../../build/gn_run_binary.sh
-../../prebuilt/third_party/clang/linux-x64/bin
-host_x64/cmc
---stamp
-gen/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2_validate_manifests_driver.cm.action.stamp
-validate-references
---component-manifest
-../../src/diagnostics/archivist/tests/v2/meta/driver.cml
---package-manifest
-obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2.manifest
---gn-label
-//src/diagnostics/archivist/tests/v2$:archivist-integration-tests-v2\(//build/toolchain/fuchsia$:arm64\)
-    `.replace(/\n/g, ' ');
-
-    const [
-      manifestSourcePath, componentName, componentTargetPath
-    ] = Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
-    assert.strictEqual(manifestSourcePath, 'src/diagnostics/archivist/tests/v2/meta/driver.cml');
-    assert.strictEqual(componentName, 'driver');
-    assert.strictEqual(componentTargetPath, 'src/diagnostics/archivist/tests/v2:driver.cm');
-  });
-
-  //////////////////////////////////////////////////////////////////////////////////////////////////
   test('archivist_integration_tests_v2_extractManifestPathAndCmlComponent', () => {
     const line = `
 command
 =
-/usr/bin/env
+
+../../build/rbe/output-scanner.sh
+--label
+//src/diagnostics/archivist/tests/integration$:archivist_integration_tests_manifest_compile\(//build/toolchain/fuchsia$:x64\)
+obj/src/diagnostics/archivist/tests/integration/cml/archivist_integration_tests_manifest_compile/archivist_integration_tests.cm
+--
 ../../build/gn_run_binary.sh
 ../../prebuilt/third_party/clang/linux-x64/bin
 host_x64/cmc
 compile
-../../src/diagnostics/archivist/tests/v2/meta/archivist_integration_tests.cml
+../../src/diagnostics/archivist/tests/integration/meta/archivist_integration_tests.cml
 --output
-obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2_archivist_integration_tests.cm
---includepath
-../../
+obj/src/diagnostics/archivist/tests/integration/cml/archivist_integration_tests_manifest_compile/archivist_integration_tests.cm
 --depfile
-obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2_archivist_integration_tests.cm.d
+obj/src/diagnostics/archivist/tests/integration/archivist_integration_tests_manifest_compile.d
+--config-package-path
+meta/archivist_integration_tests.cvf
+--includeroot
+../../
+--includepath
+../../sdk/lib/
+--features
+hub
     `.replace(/\n/g, ' ');
 
     const [
@@ -526,13 +373,12 @@ obj/src/diagnostics/archivist/tests/v2/archivist-integration-tests-v2_archivist_
     ] = Provider.extractManifestPathAndCmlComponent(line) ?? [];
     assert.strictEqual(
       manifestSourcePath,
-      'src/diagnostics/archivist/tests/v2/meta/archivist_integration_tests.cml'
+      'src/diagnostics/archivist/tests/integration/meta/archivist_integration_tests.cml'
     );
-    assert.strictEqual(componentName, 'archivist-integration-tests-v2_archivist_integration_tests');
-    // THIS SEEMS WRONG:
+    assert.strictEqual(componentName, 'archivist_integration_tests');
     assert.strictEqual(
       componentTargetPath,
-      'src/diagnostics/archivist/tests/v2:archivist-integration-tests-v2_archivist_integration_tests'
+      'src/diagnostics/archivist/tests/integration:archivist_integration_tests'
     );
   });
 
@@ -582,34 +428,6 @@ host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
       'stub_inspect_component.cm',
       'archivist-integration-tests-v2_test/archivist_integration_tests_test_spec',
     ]);
-  });
-
-  //////////////////////////////////////////////////////////////////////////////////////////////////
-  test('fonts_extractManifestPathAndComponentFromCmcValidate', () => {
-    const line = `
-command
-=
-/usr/bin/env
-../../build/gn_run_binary.sh
-../../prebuilt/third_party/clang/linux-x64/bin
-host_x64/cmc
---stamp
-gen/src/fonts/pkg_validate_manifests_fonts.cmx.action.stamp
-validate-references
---component-manifest
-../../src/fonts/meta/fonts.cmx
---package-manifest
-obj/src/fonts/pkg.manifest
---gn-label
-//src/fonts$:pkg\(//build/toolchain/fuchsia$:arm64\)
-    `.replace(/\n/g, ' ');
-
-    const [
-      manifestSourcePath, componentName, componentTargetPath
-    ] = Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
-    assert.strictEqual(manifestSourcePath, 'src/fonts/meta/fonts.cmx');
-    assert.strictEqual(componentName, 'fonts');
-    assert.strictEqual(componentTargetPath, 'src/fonts:fonts.cmx');
   });
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -810,54 +628,37 @@ host_x64/obj/src/sys/pkg/bin/pm/pm_bin.stamp
     const line = `
 command
 =
-/usr/bin/env
+
+../../build/rbe/output-scanner.sh
+--label
+//src/fonts$:font_provider_cm_manifest_compile\(//build/toolchain/fuchsia$:x64\)
+obj/src/fonts/cml/font_provider_cm_manifest_compile/fonts.cm
+--
 ../../build/gn_run_binary.sh
-../../prebuilt/third_party/clang/mac-x64/bin
+../../prebuilt/third_party/clang/linux-x64/bin
 host_x64/cmc
 compile
 ../../src/fonts/meta/fonts.cml
 --output
-obj/src/fonts/pkg_fonts.cm
---includepath
-../../
+obj/src/fonts/cml/font_provider_cm_manifest_compile/fonts.cm
 --depfile
-obj/src/fonts/pkg_fonts.cm.d
+obj/src/fonts/font_provider_cm_manifest_compile.d
+--config-package-path
+meta/fonts.cvf
+--includeroot
+../../
+--includepath
+../../sdk/lib/
+--features
+hub
     `.replace(/\n/g, ' ');
 
     const [
       manifestSourcePath, componentName, componentTargetPath
     ] = Provider.extractManifestPathAndCmlComponent(line) ?? [];
     assert.strictEqual(manifestSourcePath, 'src/fonts/meta/fonts.cml');
-    assert.strictEqual(componentName, 'pkg_fonts');
-    assert.strictEqual(componentTargetPath, 'src/fonts:pkg_fonts');
-  });
-
-  //////////////////////////////////////////////////////////////////////////////////////////////////
-  test('scenic_extractManifestPathAndComponentFromCmcValidate', () => {
-    const line = `
-command
-=
-/usr/bin/env
-../../build/gn_run_binary.sh
-../../prebuilt/third_party/clang/linux-x64/bin
-host_x64/cmc
---stamp
-gen/src/ui/scenic/scenic_pkg_validate_manifests_scenic.cmx.action.stamp
-validate-references
---component-manifest
-../../src/ui/scenic/bin/meta/scenic.cmx
---package-manifest
-obj/src/ui/scenic/scenic_pkg.manifest
---gn-label
-//src/ui/scenic$:scenic_pkg\(//build/toolchain/fuchsia$:arm64\)
-    `.replace(/\n/g, ' ');
-
-    const [
-      manifestSourcePath, componentName, componentTargetPath
-    ] = Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
-    assert.strictEqual(manifestSourcePath, 'src/ui/scenic/bin/meta/scenic.cmx');
-    assert.strictEqual(componentName, 'scenic');
-    assert.strictEqual(componentTargetPath, 'src/ui/scenic:scenic.cmx');
+    assert.strictEqual(componentName, 'fonts');
+    assert.strictEqual(componentTargetPath, 'src/fonts:font_provider_cm');
   });
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -865,18 +666,29 @@ obj/src/ui/scenic/scenic_pkg.manifest
     const line = `
 command
 =
-/usr/bin/env
+
+../../build/rbe/output-scanner.sh
+--label
+//src/sys/test_runners/elf$:elf-test-runner-component_manifest_compile\(//build/toolchain/fuchsia$:x64\)
+obj/src/sys/test_runners/elf/cml/elf-test-runner-component_manifest_compile/elf-test-runner.cm
+--
 ../../build/gn_run_binary.sh
-../../prebuilt/third_party/clang/mac-x64/bin
+../../prebuilt/third_party/clang/linux-x64/bin
 host_x64/cmc
 compile
 ../../src/sys/test_runners/elf/meta/elf_test_runner.cml
 --output
-obj/src/sys/test_runners/elf/elf-test-runner.cm
---includepath
-../../
+obj/src/sys/test_runners/elf/cml/elf-test-runner-component_manifest_compile/elf-test-runner.cm
 --depfile
-obj/src/sys/test_runners/elf/elf-test-runner-component.d
+obj/src/sys/test_runners/elf/elf-test-runner-component_manifest_compile.d
+--config-package-path
+meta/elf-test-runner.cvf
+--includeroot
+../../
+--includepath
+../../sdk/lib/
+--features
+hub
     `.replace(/\n/g, ' ');
 
     const [
@@ -885,40 +697,6 @@ obj/src/sys/test_runners/elf/elf-test-runner-component.d
     assert.strictEqual(manifestSourcePath, 'src/sys/test_runners/elf/meta/elf_test_runner.cml');
     assert.strictEqual(componentName, 'elf-test-runner');
     assert.strictEqual(componentTargetPath, 'src/sys/test_runners/elf:elf-test-runner-component');
-  });
-
-  //////////////////////////////////////////////////////////////////////////////////////////////////
-  test('extractManifestPathAndComponentFromCmcValidate', () => {
-    const line = `
-command
-=
-/usr/bin/env
-../../build/gn_run_binary.sh
-../../prebuilt/third_party/clang/linux-x64/bin
-host_x64/cmc
---stamp
-gen/src/sys/component_manager/component-manager-boot-env-tests-cmp_cmc_validate_references.action.stamp
-validate-references
---component-manifest
-../../src/sys/component_manager/meta/component_manager_boot_env_tests.cmx
---package-manifest
-gen/src/sys/component_manager/component-manager-boot-env-tests-cmp_cmc_validate_references_fini_file
---gn-label
-//src/sys/component_manager$:component-manager-boot-env-tests-cmp_cmc_validate_references\(//build/toolchain/fuchsia$:arm64\)
-    `.replace(/\n/g, ' ');
-
-    const [
-      manifestSourcePath, componentName, componentTargetPath
-    ] = Provider.extractManifestPathAndComponentFromCmcValidate(line, buildDir) ?? [];
-    assert.strictEqual(
-      manifestSourcePath,
-      'src/sys/component_manager/meta/component_manager_boot_env_tests.cmx'
-    );
-    assert.strictEqual(componentName, 'component_manager_boot_env_tests');
-    assert.strictEqual(
-      componentTargetPath,
-      'src/sys/component_manager:component-manager-boot-env-tests-cmp'
-    );
   });
 
   //////////////////////////////////////////////////////////////////////////////////////////////////

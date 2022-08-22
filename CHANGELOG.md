@@ -99,3 +99,10 @@ All notable changes to the "fuchsiaware" extension will be documented in this fi
     building packages recently changed, and the packages could not be extracted.
     This generated a VS Code error dialog when loading FuchsiAware, and
     FuchsiAware was not able to generate some cross-references.
+
+## [0.5.1]
+
+- Fixes:
+  * Adjust additional regular expressions to adapt to build rule changes, to
+    fix extracted names and paths. This corrects missing and/or invalid
+    document links from component URLs to CML manifest sources.
